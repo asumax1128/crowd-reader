@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CROWD READER</title>
+<meta name="description" content="0〜100の数を全員で同時に出し、代表値に近い順に得点する読み合いゲーム">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+
+/* Layout: 夜空の上にRPGのコマンドウィンドウを縦に重ねる1カラム。単一の夜テーマで統一。 */
+:root{
+  color-scheme:dark;
+  --sky-top:#18235e; --sky:#080c26;
+  --win-a:#2846a6; --win-b:#0c1a52; --edge:#e3e8ff; --line:rgba(227,232,255,.22);
+  --text:#f3f5ff; --dim:#aeb8e4; --gold:#ecc96d; --you:#7fe3ff; --good:#92f0ad; --bar:#6075c6;
+  --f-title:"Cinzel","Trajan Pro","Times New Roman",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  background:radial-gradient(ellipse 120% 70% at 50% 0%,var(--sky-top),var(--sky) 70%) fixed;
+  background-color:var(--sky);
+  color:var(--text); font-family:var(--f-body); font-size:15px; line-height:1.65;
+  padding-inline:16px; padding-block:24px 48px;
+}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+p{margin:0}
+.dim{color:var(--dim)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+/* タイトル */
+.logo{display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:18px 8px}
+.logo h1{
+  font-family:var(--f-title);font-weight:900;margin:0;text-align:center;line-height:1.05;
+  font-size:clamp(2.3rem,11.5vw,3.6rem);letter-spacing:.09em;
+  color:var(--text);
+  background:linear-gradient(180deg,#ffffff 0%,#dfe4fb 44%,#8e9bd0 52%,#eef1ff 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 2px 0 rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(127,170,255,.35));
+}
+.logo .rule{width:min(260px,70%);height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+.logo .sub{font-family:var(--f-title);font-weight:600;color:var(--gold);letter-spacing:.35em;font-size:.78rem}
+.logo .ja{color:var(--dim);font-size:.85rem;letter-spacing:.2em}
+
+/* コマンドウィンドウ */
+.win{
+  background:linear-gradient(180deg,var(--win-a),var(--win-b));
+  border:2px solid var(--edge);border-radius:8px;
+  box-shadow:inset 0 0 0 2px rgba(0,0,0,.35),0 4px 0 rgba(0,0,0,.4);
+  padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;
+}
+.cap{font-family:var(--f-title);font-weight:800;font-size:.8rem;letter-spacing:.18em;color:var(--gold)}
+h2{font-family:var(--f-body);font-weight:700;font-size:1.3rem;margin:0;text-wrap:balance}
+.big-title{font-family:var(--f-title);font-weight:900;font-size:2.1rem;letter-spacing:.06em;margin:0;line-height:1.2}
+
+.menu{display:flex;flex-direction:column;gap:2px}
+.cmd{
+  font:inherit;font-size:1.05rem;font-weight:700;color:var(--text);background:transparent;border:none;
+  text-align:left;padding:10px 10px 10px 30px;position:relative;cursor:pointer;border-radius:4px;min-height:44px;
+}
+.cmd::before{content:"▶";position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:.8rem;color:var(--gold);opacity:0}
+.cmd:hover::before,.cmd:focus-visible::before{opacity:1}
+.cmd:hover{background:rgba(255,255,255,.06)}
+.cmd:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.cmd:disabled{color:var(--dim);cursor:default;opacity:.6}
+.cmd:disabled::before{opacity:0}
+.cmd small{display:block;font-weight:400;font-size:.8rem;color:var(--dim)}
+.cmd.go{color:var(--gold)}
+
+input[type=text],select{
+  font:inherit;color:var(--text);background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:6px;
+  padding:10px 12px;min-height:44px;width:100%;
+}
+input[type=text]:focus-visible,select:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+input[type=range]{width:100%;accent-color:var(--gold);height:32px}
+label{font-size:.85rem;color:var(--dim)}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.val{font-family:var(--f-num);font-size:1.4rem;font-weight:600;color:var(--gold)}
+
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rules div{border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:.83rem;min-width:0;color:var(--dim)}
+.rules b{display:block;color:var(--text);font-size:.9rem}
+
+.players{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.players li{border:1px solid var(--line);border-radius:999px;padding:2px 12px;font-size:.88rem}
+.players li.me{border-color:var(--you);color:var(--you)}
+
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.chip{font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:2px 12px;background:rgba(0,0,0,.25)}
+.chip.me{border-color:var(--you);color:var(--you);font-weight:700}
+.rulewin{border-color:var(--gold)}
+.rulewin h2{font-size:1.4rem}
+
+.bignum{font-family:var(--f-num);font-size:4.2rem;line-height:1;text-align:center;font-weight:600;color:var(--you);text-shadow:0 0 18px rgba(127,227,255,.35)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.steps button{font-family:var(--f-num);font-weight:600;font-size:1rem;color:var(--text);background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:6px;min-height:44px;cursor:pointer}
+.steps button:focus-visible{outline:2px solid var(--gold)}
+.timer{font-family:var(--f-num);font-weight:600;color:var(--gold)}
+.status{font-size:.9rem;color:var(--dim)}
+
+.chart{width:100%;height:auto;display:block}
+.calc{font-family:var(--f-num);font-size:.84rem;line-height:1.85;display:flex;flex-direction:column;overflow-x:auto}
+.calc .k{color:var(--dim);font-family:var(--f-body)}
+.hl{color:var(--gold);font-weight:600}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{font-size:.75rem;color:var(--dim);font-weight:700}
+tr.me td{color:var(--you);font-weight:700}
+tr.gap td{text-align:center;color:var(--dim);border-bottom:none}
+td .tag{font-size:.72rem;color:var(--dim);margin-left:4px}
+.pt{color:var(--good);font-weight:700}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--dim)}
+.legend i{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:4px;border-radius:2px}
+.note{font-size:.8rem;color:var(--dim)}
+@media (prefers-reduced-motion: no-preference){
+  .pop{animation:pop .3s ease}
+  @keyframes pop{from{transform:translateY(4px);opacity:.5}to{transform:none;opacity:1}}
+}
+
+/* --- オンライン版の追加 --- */
+.code{font-family:var(--f-num);font-weight:600;font-size:3.2rem;letter-spacing:.25em;text-align:center;color:var(--gold);line-height:1.1;padding-left:.25em}
+.code-sm{font-family:var(--f-num);font-weight:600;color:var(--gold);letter-spacing:.12em}
+.join-row{display:flex;gap:8px}
+.join-row input{flex:1;min-width:0;font-family:var(--f-num);font-size:1.3rem;letter-spacing:.3em;text-align:center}
+.btn{font:inherit;font-weight:700;color:var(--sky);background:var(--gold);border:none;border-radius:6px;padding:0 18px;min-height:44px;cursor:pointer;flex:none}
+.btn:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.btn:disabled{opacity:.5;cursor:default}
+.err{color:#ffb4a8;font-size:.88rem;min-height:1.2em}
+.check{display:flex;gap:10px;align-items:center;font-size:.95rem;color:var(--text);cursor:pointer;min-height:44px}
+.check input{width:20px;height:20px;accent-color:var(--gold)}
+.offline{font-size:.8rem;color:var(--dim);text-align:center}
+
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+(function(){
+/* ================= Firebase 設定 ================= */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC3__kwx4TH-ezcCCUWcb_J7PWZ7pDUjDc",
+  authDomain: "asumath-games.firebaseapp.com",
+  databaseURL: "https://asumath-games-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "asumath-games",
+  storageBucket: "asumath-games.firebasestorage.app",
+  messagingSenderId: "254715782397",
+  appId: "1:254715782397:web:bda2fd2283b292db050a94"
+};
+const ROOT = 'games/crowd/rooms';
+const ROOM_TTL = 6*60*60*1000;   // 6時間たった部屋コードは再利用できる
+
+/* ================= ルール・統計 ================= */
+const ROUNDS = 6, MIN_N = 20, MAX_N = 50;
+const POINTS = (r,n) => Math.max(0, n-2*(r-1));
+const scoreLimit = n => Math.ceil(n/2);
+function medianSorted(a){ const n=a.length, h=Math.floor(n/2); return n%2 ? a[h] : (a[h-1]+a[h])/2; }
+function stats(vals){
+  const s = vals.slice().sort((a,b)=>a-b), n = s.length, sum = s.reduce((a,b)=>a+b,0), h = Math.floor(n/2);
+  return {sorted:s, n, sum, mean:sum/n, median:medianSorted(s), q1:medianSorted(s.slice(0,h)), q3:medianSorted(s.slice(n%2?h+1:h)), half:h, min:s[0], max:s[n-1]};
+}
+const f = x => (Math.round(x*100)/100).toString();
+function medianText(st){
+  const n=st.n, s=st.sorted;
+  return n%2 ? `${(n+1)/2}番目 = ${st.median}` : `${n/2}番目と${n/2+1}番目の平均 = (${s[n/2-1]} + ${s[n/2]}) ÷ 2 = ${f(st.median)}`;
+}
+const RULES = [
+  {id:'median', name:'中央値に一番近い人', short:'中央値', desc:'全員の数を小さい順に並べた真ん中。', mode:'near', target:s=>s.median, tf:s=>`目標 = 中央値 = ${f(s.median)}`},
+  {id:'mean', name:'平均値に一番近い人', short:'平均値', desc:'全員の合計 ÷ 人数。', mode:'near', target:s=>s.mean, tf:s=>`目標 = 平均値 = ${f(s.mean)}`},
+  {id:'twothirds', name:'平均値の 2/3 に一番近い人', short:'平均×2/3', desc:'みんなが読み合うと、どこまで下がる？', mode:'near', target:s=>s.mean*2/3, tf:s=>`目標 = ${f(s.mean)} × 2/3 = ${f(s.mean*2/3)}`},
+  {id:'q1', name:'第1四分位数に一番近い人', short:'Q1', desc:'下位半分のデータの中央値。', mode:'near', target:s=>s.q1, tf:s=>`目標 = Q1 = ${f(s.q1)}（下位${s.half}個の中央値）`},
+  {id:'q3', name:'第3四分位数に一番近い人', short:'Q3', desc:'上位半分のデータの中央値。', mode:'near', target:s=>s.q3, tf:s=>`目標 = Q3 = ${f(s.q3)}（上位${s.half}個の中央値）`},
+  {id:'far', name:'平均値から一番遠い人', short:'外れ値', desc:'目立った者勝ち。でも全員が端に行くと…？', mode:'far', target:s=>s.mean, tf:s=>`基準 = 平均値 = ${f(s.mean)}（遠いほど上位）`},
+];
+const ruleOf = id => RULES.find(r=>r.id===id) || RULES[0];
+function judge(vals, rule){
+  const st = stats(vals), t = rule.target(st), n = vals.length;
+  const d = vals.map(v=>Math.abs(v-t));
+  const sorted = d.slice().sort((a,b)=> rule.mode==='near' ? a-b : b-a);
+  const rank = d.map(x=>{
+    let lo=0, hi=n;
+    while(lo<hi){ const m=(lo+hi)>>1; const better = rule.mode==='near' ? sorted[m] < x-1e-9 : sorted[m] > x+1e-9; if(better) lo=m+1; else hi=m; }
+    return lo+1;
+  });
+  return {st, t, d, rank, pts:rank.map(r=>POINTS(r,n))};
+}
+
+/* ================= CPU ================= */
+const rint=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const clamp=x=>Math.max(0,Math.min(100,Math.round(x)));
+const gauss=()=>{ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+const shuffle=a=>{ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const TYPES = { r:{label:'気まぐれ',w:.22}, f:{label:'好きな数派',w:.10}, n:{label:'セオリー派',w:.30}, l:{label:'読み合い派',w:.20}, e:{label:'学習派',w:.18} };
+const FAVS=[0,7,13,33,42,50,50,50,77,99,100];
+function pickType(){ let r=Math.random(), acc=0; for(const k in TYPES){ acc+=TYPES[k].w; if(r<acc) return k; } return 'n'; }
+function estimate(rule, n, sampler){
+  let sum=0; const K=12;
+  for(let k=0;k<K;k++){ const v=[]; for(let i=0;i<n;i++) v.push(sampler()); sum+=rule.target(stats(v)); }
+  return sum/K;
+}
+function cpuPicks(rule, n, last, types){
+  const uni=()=>rint(0,100);
+  const naiveEst = estimate(rule, n, uni);
+  const level2Est = estimate(rule, n, ()=> Math.random()<.35 ? uni() : clamp(naiveEst + gauss()*10));
+  const learnEst = last && last.length ? estimate(rule, n, ()=>clamp(last[rint(0,last.length-1)] + gauss()*6)) : naiveEst;
+  const aim = (est, sd)=>{
+    if(rule.mode==='far'){ const side = est>=50 ? 0 : 100; return clamp(side===0 ? Math.abs(gauss())*sd*1.5 : 100-Math.abs(gauss())*sd*1.5); }
+    return clamp(est + gauss()*sd);
+  };
+  return types.map(t=> t==='r' ? uni() : t==='f' ? FAVS[rint(0,FAVS.length-1)] : t==='n' ? aim(naiveEst,11) : t==='l' ? aim(level2Est,9) : t==='e' ? aim(learnEst,10) : uni());
+}
+
+/* ================= 共通 ================= */
+const app = document.getElementById('app');
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls = {
+  get(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+const arr = v => Array.isArray(v) ? v : (v && typeof v==='object' ? Object.keys(v).sort((a,b)=>a-b).map(k=>v[k]) : []);
+
+let db=null, uid=null, offset=0, fbError='';
+const now = () => Date.now() + offset;
+
+let nick = ls.get('crowd-reader-nick');
+let screen = 'home';          // home | solo | lobby | game
+let solo = false;
+let code = '';                // 部屋コード
+let meta = null, players = {}, G = null;
+let isHost = false, hostPlays = true;
+let myPick = 50, submittedKey = '', homeErr = '';
+let unsub = [];
+const HOST = {target:30, limit:10, closing:false, pickCount:0, pickRef:null};
+let soloPick = null;
+
+const me = () => solo ? 'solo-me' : uid;
+const seats = () => G ? arr(G.seats) : [];
+const H = () => seats().length;
+const myIdx = () => seats().findIndex(s=>s && s[0]===me());
+const roundKey = () => G ? `g${G.gid}r${G.round}` : '';
+const totals = () => arr(G.totals);
+const subs = () => arr(G.subs);
+const seatName = i => i<H() ? seats()[i][1] : `CPU-${String(i-H()+1).padStart(2,'0')}`;
+const seatTag = i => i<H() ? (subs().includes(i) ? '代役CPU' : '') : (TYPES[(G.cpu||'')[i-H()]]||{label:''}).label;
+const rankOf = i => 1 + totals().filter(t=>t>totals()[i]).length;
+const roomRef = p => db.ref(`${ROOT}/${code}${p?'/'+p:''}`);
+
+/* ================= Firebase 接続 ================= */
+function initFirebase(){
+  if(!window.firebase){ fbError = 'オンライン機能を読み込めませんでした（通信が制限されている可能性があります）'; return; }
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    db.ref('.info/serverTimeOffset').on('value', s=>{ offset = s.val()||0; });
+    firebase.auth().onAuthStateChanged(u=>{
+      if(u){ uid = u.uid; fbError=''; if(screen==='home') render(); }
+    });
+    firebase.auth().signInAnonymously().catch(e=>{
+      fbError = 'サーバーにログインできませんでした（' + (e.code||'error') + '）';
+      if(screen==='home') render();
+    });
+  }catch(e){ fbError = 'オンライン機能の初期化に失敗しました'; }
+}
+
+/* ================= 部屋 ================= */
+async function createRoom(){
+  homeErr='';
+  for(let tries=0; tries<12; tries++){
+    const c = String(rint(1000,9999));
+    const ref = db.ref(`${ROOT}/${c}/meta`);
+    let res;
+    try{
+      res = await ref.transaction(cur=>{
+        if(cur && cur.host!==uid && cur.createdAt > now()-ROOM_TTL) return;   // 使用中
+        return {host:uid, createdAt:firebase.database.ServerValue.TIMESTAMP};
+      });
+    }catch(e){ homeErr='部屋を作れませんでした（'+(e.code||e.message)+'）'; render(); return; }
+    if(res.committed){
+      code = c;
+      // 前の持ち主のデータを片付ける
+      await Promise.all(['players','state','picks'].map(p=>roomRef(p).remove().catch(()=>{})));
+      ls.set('crowd-reader-room', code);
+      enterRoom(true);
+      return;
+    }
+  }
+  homeErr='空いている部屋コードが見つかりませんでした。もう一度試してください'; render();
+}
+async function joinRoom(c){
+  homeErr='';
+  if(!/^\d{4}$/.test(c)){ homeErr='4桁の数字を入れてください'; render(); return; }
+  let snap;
+  try{ snap = await db.ref(`${ROOT}/${c}/meta`).get(); }
+  catch(e){ homeErr='接続できませんでした（'+(e.code||e.message)+'）'; render(); return; }
+  const m = snap.val();
+  if(!m || m.createdAt < now()-ROOM_TTL){ homeErr='その部屋は見つかりません'; render(); return; }
+  code = c; ls.set('crowd-reader-room', code);
+  enterRoom(m.host===uid);
+}
+function enterRoom(host){
+  isHost = host; solo = false; screen = 'lobby'; G = null; players = {};
+  if(!isHost || hostPlays) announce();
+  unsub.forEach(u=>u()); unsub = [];
+  const listen = (ref, fn)=>{ ref.on('value', fn, ()=>{}); unsub.push(()=>ref.off('value', fn)); };
+  listen(roomRef('meta'), s=>{ meta = s.val(); });
+  listen(roomRef('players'), s=>{ players = s.val()||{}; if(screen==='lobby') refreshLobby(); });
+  listen(roomRef('state'), s=>onState(s.val()));
+  const conn = db.ref('.info/connected');
+  const onConn = s=>{ if(s.val() && code && (!isHost || hostPlays)) announce(); };
+  conn.on('value', onConn); unsub.push(()=>conn.off('value', onConn));
+  render();
+}
+function announce(){
+  const ref = roomRef('players/'+uid);
+  ref.set({name: nick||'なまえなし', joinedAt: firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});
+  ref.onDisconnect().remove();
+}
+function leaveRoom(){
+  if(db && code && uid){
+    const ref = roomRef('players/'+uid); ref.onDisconnect().cancel(); ref.remove().catch(()=>{});
+  }
+  unsub.forEach(u=>u()); unsub=[];
+  stopPickWatch();
+  code=''; G=null; isHost=false; solo=false; screen='home'; render(); window.scrollTo(0,0);
+}
+
+/* ================= 状態の反映 ================= */
+function onState(s){
+  const prevPhase = G && G.phase, prevRound = G && G.round, prevGid = G && G.gid;
+  if(!s || s.phase==='lobby'){
+    G = null; stopPickWatch();
+    if(screen!=='lobby'){ screen='lobby'; render(); window.scrollTo(0,0); } else refreshLobby();
+    return;
+  }
+  G = s;
+  if(G.gid!==prevGid || G.round!==prevRound){ myPick = 50; }
+  if(isHost) syncPickWatch();
+  const changed = screen!=='game' || prevPhase!==G.phase || prevRound!==G.round || prevGid!==G.gid;
+  screen='game';
+  if(changed){
+    if(G.phase==='pick' && myIdx()>=0 && submittedKey!==roundKey() && !solo) checkMyPick();
+    render(); window.scrollTo(0,0);
+  } else patchCounts();
+}
+function checkMyPick(){
+  const k = roundKey();
+  roomRef(`picks/${k}/${uid}`).get().then(s=>{
+    if(s.exists() && roundKey()===k){ submittedKey=k; myPick=s.val(); render(); }
+  }).catch(()=>{});
+}
+
+/* ================= ホストの進行 ================= */
+function commit(next){
+  if(solo){ onSoloState(next); return; }
+  roomRef('state').set(next).catch(e=>console.error(e));
+}
+function onSoloState(next){
+  const prev = G; G = next; screen='game';
+  if(!prev || prev.phase!==G.phase || prev.round!==G.round){ if(G.phase==='pick'){ myPick=50; soloPick=null; } render(); window.scrollTo(0,0); }
+}
+function startGame(){
+  let list;
+  if(solo) list = [['solo-me', nick||'あなた']];
+  else{
+    list = Object.entries(players||{}).filter(([k,p])=>p && typeof p.name==='string')
+      .sort((a,b)=>(a[1].joinedAt||0)-(b[1].joinedAt||0)).map(([k,p])=>[k, p.name.slice(0,8)]);
+    if(!hostPlays) list = list.filter(s=>s[0]!==uid);
+    list = list.slice(0, MAX_N);
+    if(!list.length) return;
+  }
+  const n = Math.max(HOST.target, list.length);
+  HOST.closing = false;
+  if(!solo) roomRef('picks').remove().catch(()=>{});
+  commit({gid:Date.now(), phase:'pick', n, limit: solo?0:HOST.limit, round:0, order:shuffle(RULES.map(r=>r.id)),
+    seats:list, cpu:Array.from({length:n-list.length}, pickType).join(''), totals:new Array(n).fill(0),
+    picked:0, endsAt: solo?0:now()+HOST.limit*1000});
+}
+function syncPickWatch(){
+  if(!G || G.phase!=='pick'){ stopPickWatch(); return; }
+  const path = `picks/${roundKey()}`;
+  if(HOST.pickRef && HOST.pickRef._p===path) return;
+  stopPickWatch();
+  const ref = roomRef(path); ref._p = path; HOST.pickCount = 0;
+  const fn = s=>{
+    const v = s.val()||{};
+    const c = seats().filter(x=>x[0] in v).length;
+    HOST.pickCount = c;
+    if(G && G.phase==='pick' && c!==G.picked) roomRef('state/picked').set(c).catch(()=>{});
+  };
+  ref.on('value', fn, ()=>{}); ref._fn = fn; HOST.pickRef = ref;
+}
+function stopPickWatch(){ if(HOST.pickRef){ HOST.pickRef.off('value', HOST.pickRef._fn); HOST.pickRef=null; } }
+async function hostTick(){
+  if(!G || G.phase!=='pick' || HOST.closing) return;
+  if(solo){ if(soloPick!==null) closeRound({'solo-me':soloPick}); return; }
+  if(!isHost) return;
+  if(HOST.pickCount>=H() || now()>=G.endsAt){
+    HOST.closing = true;
+    let picks = {};
+    try{ picks = (await roomRef(`picks/${roundKey()}`).get()).val()||{}; }catch(e){}
+    closeRound(picks);
+  }
+}
+function closeRound(picks){
+  HOST.closing = true;
+  const rule = ruleOf(arr(G.order)[G.round]), n = G.n, h = H(), st = seats();
+  const vals = new Array(n), sub = [], idx = [], types = [];
+  st.forEach((s,i)=>{
+    const v = picks[s[0]];
+    if(typeof v==='number' && v>=0 && v<=100) vals[i] = Math.round(v);
+    else { sub.push(i); idx.push(i); types.push('e'); }
+  });
+  for(let i=h;i<n;i++){ idx.push(i); types.push((G.cpu||'')[i-h]||'n'); }
+  const cp = cpuPicks(rule, n, arr(G.lastVals), types);
+  idx.forEach((ix,k)=>vals[ix]=cp[k]);
+  const r = judge(vals, rule);
+  const tot = totals().slice(); while(tot.length<n) tot.push(0);
+  r.pts.forEach((p,k)=>tot[k]+=p);
+  commit(Object.assign({}, G, {phase:'result', vals, lastVals:vals, subs:sub, totals:tot, picked:h-sub.length}));
+  setTimeout(()=>{ HOST.closing=false; }, 1500);
+}
+function nextRound(){
+  if(G.round+1>=ROUNDS) commit(Object.assign({}, G, {phase:'final'}));
+  else commit(Object.assign({}, G, {phase:'pick', round:G.round+1, vals:null, subs:null, picked:0, endsAt: solo?0:now()+G.limit*1000}));
+}
+function backToLobby(){
+  if(solo){ G=null; screen='solo'; render(); window.scrollTo(0,0); return; }
+  roomRef('picks').remove().catch(()=>{});
+  commit({phase:'lobby'});
+}
+
+/* ================= 画面 ================= */
+function render(){ ({home:renderHome, solo:renderSolo, lobby:renderLobby, game:renderGame})[screen](); }
+const logo = small => `<header class="logo">${small?'':'<span class="sub">A GAME OF STATISTICS</span>'}
+  <h1>CROWD READER</h1><div class="rule"></div><span class="ja">群衆の数を読め</span></header>`;
+function rulesWin(){
+  return `<section class="win">
+    <span class="cap">HOW TO PLAY</span>
+    <p>0〜100の整数を全員で同時に出す。毎ラウンド変わる「代表値」に近い順に得点。1位は人数と同じ点、そこから2点ずつ減り、人数の半分の順位まで点が入る。全${ROUNDS}ラウンドの合計で勝負。足りない席はCPUが埋める。</p>
+    <div class="rules">${RULES.map(r=>`<div><b>${r.short}</b>${r.desc}</div>`).join('')}</div>
+  </section>`;
+}
+function renderHome(){
+  const ok = !!(db && uid);
+  const last = ls.get('crowd-reader-room');
+  app.innerHTML = `${logo(false)}
+  <section class="win">
+    <label for="nickInput">プレイヤー名（8文字まで）</label>
+    <input type="text" id="nickInput" maxlength="8" value="${esc(nick)}" placeholder="なまえ" autocomplete="nickname">
+  </section>
+  <section class="win">
+    <span class="cap">JOIN</span>
+    <label for="codeInput">先生に言われた部屋コード（4桁）</label>
+    <div class="join-row">
+      <input type="text" id="codeInput" inputmode="numeric" maxlength="4" pattern="[0-9]*" value="${esc(last)}" placeholder="0000" autocomplete="off">
+      <button class="btn" id="joinBtn" ${ok?'':'disabled'}>参加</button>
+    </div>
+    <p class="err" id="homeErr" role="alert">${esc(homeErr)}</p>
+  </section>
+  <section class="win menu" aria-label="メニュー">
+    <button class="cmd go" id="createBtn" ${ok?'':'disabled'}>部屋を作る<small>ホストとして新しい部屋コードを発行する</small></button>
+    <button class="cmd" id="soloBtn">ひとりで練習<small>自分以外は全員CPU</small></button>
+  </section>
+  ${ok?'':`<p class="offline">${esc(fbError || 'サーバーに接続しています…')}</p>`}
+  ${rulesWin()}`;
+  const ni = document.getElementById('nickInput');
+  ni.oninput = ()=>{ nick = ni.value.trim().slice(0,8); ls.set('crowd-reader-nick', nick); };
+  const needName = ()=>{ if(nick) return false; ni.focus(); document.getElementById('homeErr').textContent='先にプレイヤー名を入れてください'; return true; };
+  const ci = document.getElementById('codeInput');
+  ci.oninput = ()=>{ ci.value = ci.value.replace(/\D/g,'').slice(0,4); };
+  const jb = document.getElementById('joinBtn');
+  jb.onclick = ()=>{ if(needName()) return; jb.disabled=true; joinRoom(ci.value); };
+  ci.onkeydown = e=>{ if(e.key==='Enter' && !jb.disabled) jb.click(); };
+  const cb = document.getElementById('createBtn');
+  cb.onclick = ()=>{ if(needName()) return; cb.disabled=true; createRoom(); };
+  document.getElementById('soloBtn').onclick = ()=>{ solo=true; isHost=true; screen='solo'; render(); };
+}
+function settingsHtml(withLimit){
+  return `<div class="row"><label for="nRange">CPUを含めた人数</label><span class="val" id="nOut">${HOST.target}人</span></div>
+    <input type="range" id="nRange" min="${MIN_N}" max="${MAX_N}" step="1" value="${HOST.target}">
+    <p class="note" id="ptsNote"></p>
+    ${withLimit?`<label for="limitSel">1ラウンドの制限時間（出さなかった人はCPUが代役）</label>
+    <select id="limitSel">${[10,20,30].map(s=>`<option value="${s}" ${s===HOST.limit?'selected':''}>${s}秒</option>`).join('')}</select>`:''}`;
+}
+function bindSettings(){
+  const nr=document.getElementById('nRange'), no=document.getElementById('nOut'), pn=document.getElementById('ptsNote');
+  const show=()=>{ const lim=scoreLimit(HOST.target); pn.textContent=`1位 ${HOST.target}点、2位 ${HOST.target-2}点 … ${lim}位 ${POINTS(lim,HOST.target)}点（参加者が多ければ人数は自動で増えます）`; };
+  show(); nr.oninput=()=>{ HOST.target=+nr.value; no.textContent=HOST.target+'人'; show(); };
+  const sel=document.getElementById('limitSel'); if(sel) sel.onchange=()=>{ HOST.limit=+sel.value; };
+}
+function renderSolo(){
+  app.innerHTML = `${logo(true)}
+  <section class="win"><span class="cap">PRACTICE</span>${settingsHtml(false)}</section>
+  <section class="win menu">
+    <button class="cmd go" id="startBtn">ゲーム開始</button>
+    <button class="cmd" id="backBtn">もどる</button>
+  </section>`;
+  bindSettings();
+  document.getElementById('startBtn').onclick = startGame;
+  document.getElementById('backBtn').onclick = ()=>{ solo=false; isHost=false; screen='home'; render(); };
+}
+function lobbyList(){
+  return Object.entries(players||{}).filter(([k,p])=>p && typeof p.name==='string')
+    .sort((a,b)=>(a[1].joinedAt||0)-(b[1].joinedAt||0));
+}
+function lobbyListHtml(){
+  const l = lobbyList();
+  return l.length ? l.map(([k,p])=>`<li class="${k===uid?'me':''}">${esc(p.name.slice(0,8))}${k===uid?'（あなた）':''}</li>`).join('') : '<li>まだ誰もいません</li>';
+}
+function renderLobby(){
+  app.innerHTML = `${logo(true)}
+  <section class="win">
+    <span class="cap">ROOM CODE</span>
+    <p class="code">${esc(code)}</p>
+    <p class="note" style="text-align:center">${isHost?'生徒はこのページを開いて、このコードで参加します':'ホストが開始するのを待っています…'}</p>
+  </section>
+  <section class="win">
+    <div class="row"><span class="cap">PLAYERS</span><span class="num dim" id="lobbyCount">${lobbyList().length}人</span></div>
+    <ul class="players" id="lobbyList">${lobbyListHtml()}</ul>
+  </section>
+  ${isHost ? `<section class="win">
+      <span class="cap">HOST</span>
+      <label class="check"><input type="checkbox" id="playChk" ${hostPlays?'checked':''}> ホストも参加者として遊ぶ</label>
+      ${settingsHtml(true)}
+    </section>
+    <section class="win menu">
+      <button class="cmd go" id="startBtn">このメンバーで開始</button>
+      <button class="cmd" id="backBtn">部屋を出る</button>
+    </section>`
+  : `<section class="win menu"><button class="cmd" id="backBtn">部屋を出る</button></section>`}`;
+  if(isHost){
+    bindSettings();
+    const pc=document.getElementById('playChk');
+    pc.onchange=()=>{ hostPlays=pc.checked; if(hostPlays) announce(); else { const r=roomRef('players/'+uid); r.onDisconnect().cancel(); r.remove().catch(()=>{}); } };
+    document.getElementById('startBtn').onclick = ()=>{ if(!lobbyList().filter(([k])=>hostPlays||k!==uid).length) return; startGame(); };
+  }
+  document.getElementById('backBtn').onclick = leaveRoom;
+}
+function refreshLobby(){
+  const ul=document.getElementById('lobbyList'), c=document.getElementById('lobbyCount');
+  if(ul){ ul.innerHTML=lobbyListHtml(); c.textContent=lobbyList().length+'人'; }
+}
+
+function renderGame(){
+  if(!G){ app.innerHTML = `${logo(true)}<section class="win"><p class="status">受信しています…</p></section>`; return; }
+  ({pick:renderPick, result:renderResult, final:renderFinal})[G.phase]();
+}
+function topbar(label){
+  const i = myIdx();
+  const codeChip = solo ? '' : `<span class="chip">ROOM <span class="code-sm">${esc(code)}</span></span>`;
+  return `<div class="topbar"><span class="cap num">${label}</span><span style="display:flex;gap:6px;flex-wrap:wrap">${codeChip}${i>=0?`<span class="chip me num">${totals()[i]}点 ・ ${rankOf(i)}位 / ${G.n}人</span>`:`<span class="chip">${isHost?'ホスト':'観戦中'}</span>`}</span></div>`;
+}
+function renderPick(){
+  const rule = ruleOf(arr(G.order)[G.round]), i = myIdx(), done = submittedKey===roundKey();
+  const timed = !solo;
+  app.innerHTML = `
+  ${topbar(`ROUND ${G.round+1} / ${ROUNDS}`)}
+  <section class="win rulewin pop">
+    <span class="cap">TARGET</span>
+    <h2>${rule.name}</h2>
+    <p class="dim" style="font-size:.9rem">${rule.desc}</p>
+  </section>
+  ${i<0 ? `<section class="win">
+      ${timed?`<div class="row"><span class="status">${isHost?'生徒の提出を待っています':'このゲームは観戦です。次のゲームから参加できます'}</span><span class="timer" id="timer"></span></div>`:''}
+      <p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出</p>
+    </section>` : `
+  <section class="win">
+    <div class="row"><label for="pickRange">あなたの数</label>${timed?`<span class="timer" id="timer"></span>`:''}</div>
+    <div class="bignum" id="bigNum" aria-live="polite">${myPick}</div>
+    ${done ? `<p class="status" style="text-align:center">提出済み。ほかの人を待っています</p>` : `
+    <input type="range" id="pickRange" min="0" max="100" step="1" value="${myPick}">
+    <div class="steps">
+      <button data-d="-10">−10</button><button data-d="-1">−1</button>
+      <button data-d="1">＋1</button><button data-d="10">＋10</button>
+    </div>`}
+    ${solo?'':`<p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出 ・ ほか${G.n-H()}席はCPU</p>`}
+  </section>
+  ${done?'':`<section class="win menu"><button class="cmd go" id="submitBtn">この数で勝負</button></section>`}`}`;
+  updateTimer();
+  if(i<0 || done) return;
+  const rng=document.getElementById('pickRange'), big=document.getElementById('bigNum');
+  const set=v=>{ myPick=clamp(v); rng.value=myPick; big.textContent=myPick; };
+  rng.oninput=()=>set(+rng.value);
+  app.querySelectorAll('.steps button').forEach(b=>b.onclick=()=>set(myPick + +b.dataset.d));
+  document.getElementById('submitBtn').onclick = ()=>{
+    const k = roundKey();
+    if(solo){ submittedKey=k; soloPick=myPick; render(); setTimeout(hostTick, 500); return; }
+    if(now() >= G.endsAt){ return; }
+    const btn=document.getElementById('submitBtn'); btn.disabled=true;
+    roomRef(`picks/${k}/${uid}`).set(myPick)
+      .then(()=>{ submittedKey=k; if(roundKey()===k && G.phase==='pick') render(); })
+      .catch(()=>{ btn.disabled=false; btn.textContent='送信できませんでした。もう一度'; });
+  };
+}
+function patchCounts(){
+  const el=document.getElementById('pickedTxt');
+  if(el && G) el.textContent = `${G.picked||0} / ${H()}人が提出` + (myIdx()>=0 && !solo ? ` ・ ほか${G.n-H()}席はCPU` : '');
+}
+function updateTimer(){
+  const el=document.getElementById('timer');
+  if(!el || !G || G.phase!=='pick') return;
+  const s = Math.max(0, Math.ceil((G.endsAt-now())/1000));
+  el.textContent = s>0 ? `残り ${s}秒` : '集計中…';
+  if(s===0){ const b=document.getElementById('submitBtn'); if(b){ b.disabled=true; b.textContent='時間切れ'; } }
+}
+
+function chart(vals, r, rule, mi){
+  const st=r.st, W=360, L=24, R=344, X=v=>L+(R-L)*v/100;
+  const bins=new Array(20).fill(0); vals.forEach(v=>bins[Math.min(19,Math.floor(v/5))]++);
+  const maxC=Math.max(...bins), hTop=16, hBase=120, sc=(hBase-hTop-14)/maxC, bw=(R-L)/20;
+  const bars=bins.map((c,i)=>c?`<rect x="${L+i*bw+1}" y="${hBase-c*sc}" width="${bw-2}" height="${c*sc}" fill="var(--bar)"/>`:'').join('');
+  const yTicks=[0,Math.ceil(maxC/2),maxC].filter((v,i,a)=>a.indexOf(v)===i).map(c=>`<text x="${L-4}" y="${hBase-c*sc+3}" text-anchor="end" font-size="9" fill="var(--dim)" font-family="IBM Plex Mono,monospace">${c}</text>`).join('');
+  const xTicks=[0,25,50,75,100].map(t=>`<line x1="${X(t)}" x2="${X(t)}" y1="${hBase}" y2="${hBase+4}" stroke="var(--dim)"/><text x="${X(t)}" y="${hBase+15}" text-anchor="middle" font-size="10" fill="var(--dim)" font-family="IBM Plex Mono,monospace">${t}</text>`).join('');
+  const by=152;
+  const box=`<line x1="${X(st.min)}" x2="${X(st.q1)}" y1="${by}" y2="${by}" stroke="var(--text)"/>
+    <line x1="${X(st.q3)}" x2="${X(st.max)}" y1="${by}" y2="${by}" stroke="var(--text)"/>
+    <line x1="${X(st.min)}" x2="${X(st.min)}" y1="${by-6}" y2="${by+6}" stroke="var(--text)"/>
+    <line x1="${X(st.max)}" x2="${X(st.max)}" y1="${by-6}" y2="${by+6}" stroke="var(--text)"/>
+    <rect x="${X(st.q1)}" y="${by-10}" width="${Math.max(1,X(st.q3)-X(st.q1))}" height="20" fill="var(--win-b)" stroke="var(--text)"/>
+    <line x1="${X(st.median)}" x2="${X(st.median)}" y1="${by-10}" y2="${by+10}" stroke="var(--text)" stroke-width="2"/>
+    <text x="${X(st.mean)}" y="${by+4}" text-anchor="middle" font-size="11" fill="var(--text)">+</text>`;
+  const tx=X(r.t);
+  const target=`<rect x="${tx-1.5}" y="${hTop-2}" width="3" height="${by+12-hTop}" fill="var(--gold)"/>
+    <text x="${Math.min(Math.max(tx,40),320)}" y="${hTop-5}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--gold)">${rule.mode==='far'?'基準':'目標'} ${f(r.t)}</text>`;
+  let you='';
+  if(mi>=0){
+    const b=Math.min(19,Math.floor(vals[mi]/5)), yx=X(vals[mi]);
+    you=`<rect x="${L+b*bw+1}" y="${hBase-bins[b]*sc}" width="${bw-2}" height="${bins[b]*sc}" fill="var(--you)" opacity=".7"/>
+      <path d="M${yx-5} ${hBase+29} L${yx+5} ${hBase+29} L${yx} ${hBase+22} Z" fill="var(--you)"/>`;
+  }
+  return `<svg class="chart" viewBox="0 0 ${W} 174" role="img" aria-label="全員の数のヒストグラムと箱ひげ図">
+    <line x1="${L}" x2="${R}" y1="${hBase}" y2="${hBase}" stroke="var(--text)"/>${bars}${you}${yTicks}${xTicks}${box}${target}</svg>`;
+}
+function rowsHtml(order, cells, mi, limit, cols){
+  const top = order.slice(0,limit);
+  let html = top.map(i=>cells(i)).join('');
+  if(mi>=0 && !top.includes(mi)) html += `<tr class="gap"><td colspan="${cols}">⋮</td></tr>` + cells(mi);
+  return html;
+}
+function hostControls(label){
+  return isHost ? `<section class="win menu"><button class="cmd go" id="nextBtn">${label}</button></section>`
+                : `<section class="win"><p class="status">ホストの進行を待っています…</p></section>`;
+}
+function renderResult(){
+  const vals = arr(G.vals);
+  if(vals.length!==G.n){ app.innerHTML = `${topbar('集計中')}<section class="win"><p class="status">集計中…</p></section>`; return; }
+  const rule=ruleOf(arr(G.order)[G.round]), r=judge(vals, rule), st=r.st, mi=myIdx(), lim=scoreLimit(G.n);
+  const head = mi<0 ? 'ラウンド結果' : r.pts[mi] ? `${r.rank[mi]}位！ +${r.pts[mi]}点` : `${r.rank[mi]}位（得点は${lim}位まで）`;
+  const order = vals.map((v,i)=>i).sort((a,b)=>r.rank[a]-r.rank[b] || a-b);
+  const cell = i=>`<tr class="${i===mi?'me':''}"><td class="num">${r.rank[i]}位</td><td>${esc(seatName(i))}${seatTag(i)?`<span class="tag">${seatTag(i)}</span>`:''}</td><td class="num">${vals[i]}</td><td class="num">${f(r.d[i])}</td><td class="num ${r.pts[i]?'pt':''}">+${r.pts[i]}</td></tr>`;
+  const last = G.round+1>=ROUNDS, sb = subs();
+  app.innerHTML = `
+  ${topbar(`ROUND ${G.round+1} / ${ROUNDS}`)}
+  <section class="win pop">
+    <span class="cap">${rule.name}</span>
+    <h2>${head}</h2>
+    ${chart(vals, r, rule, mi)}
+    <div class="legend"><span><i style="background:var(--bar)"></i>度数（階級幅5）</span>${mi>=0?'<span><i style="background:var(--you)"></i>あなた</span>':''}<span><i style="background:var(--gold)"></i>${rule.mode==='far'?'基準':'目標'}</span><span>箱ひげ図の＋は平均値</span></div>
+  </section>
+  <section class="win">
+    <span class="cap">CALCULATION ・ ${st.n}人</span>
+    <div class="calc">
+      <div><span class="k">平均値：</span>${st.sum} ÷ ${st.n} = ${f(st.mean)}</div>
+      <div><span class="k">中央値：</span>${medianText(st)}</div>
+      <div><span class="k">四分位数：</span>Q1 = ${f(st.q1)}, Q3 = ${f(st.q3)}（各${st.half}個の中央値）</div>
+      <div><span class="k">最小・最大：</span>${st.min}, ${st.max}</div>
+      <div class="hl">${rule.tf(st)}</div>
+    </div>
+  </section>
+  <section class="win">
+    <span class="cap">RANKING ・ ${lim}位まで得点</span>
+    <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>数</th><th>距離</th><th>得点</th></tr></thead>
+    <tbody>${rowsHtml(order, cell, mi, 10, 5)}</tbody></table></div>
+    ${sb.length?`<p class="note">時間内に出さなかった${sb.length}人の席はCPUが代役で出しました。</p>`:''}
+  </section>
+  ${hostControls(last?'最終結果へ':'次のラウンドへ')}`;
+  const nb=document.getElementById('nextBtn'); if(nb) nb.onclick=()=>{ nb.disabled=true; nextRound(); };
+}
+function renderFinal(){
+  const mi=myIdx(), tot=totals();
+  const order=tot.map((t,i)=>i).sort((a,b)=>tot[b]-tot[a] || a-b);
+  const cell=i=>`<tr class="${i===mi?'me':''}"><td class="num">${rankOf(i)}位</td><td>${esc(seatName(i))}${i>=H()?`<span class="tag">${seatTag(i)}</span>`:''}</td><td class="num">${tot[i]}点</td></tr>`;
+  const humans = seats().map((s,i)=>i).sort((a,b)=>tot[b]-tot[a] || a-b);
+  app.innerHTML = `
+  <header class="logo"><span class="sub">FINAL RESULT</span>
+    <p class="big-title">${mi<0?'ゲーム終了':rankOf(mi)===1?'VICTORY':`${rankOf(mi)}位`}</p>
+    <div class="rule"></div>
+    ${mi>=0?`<span class="ja">${tot[mi]}点 / 最大 ${G.n*ROUNDS}点 ・ ${G.n}人中</span>`:''}</header>
+  <section class="win">
+    <span class="cap">STANDINGS ・ CPU込み</span>
+    <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>合計</th></tr></thead>
+    <tbody>${rowsHtml(order, cell, mi, 10, 3)}</tbody></table></div>
+  </section>
+  ${!solo && H()>1 ? `<section class="win">
+    <span class="cap">PLAYERS ・ 人間だけ</span>
+    <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>合計</th></tr></thead>
+    <tbody>${humans.map(cell).join('')}</tbody></table></div>
+  </section>`:''}
+  ${isHost ? `<section class="win menu">
+      <button class="cmd go" id="againBtn">${solo?'もう一度遊ぶ':'ロビーにもどる'}</button>
+      <button class="cmd" id="homeBtn">タイトルへ</button></section>`
+    : `<section class="win menu"><p class="status" style="padding:4px 8px">ホストが次のゲームを準備するとロビーにもどります</p><button class="cmd" id="homeBtn">部屋を出る</button></section>`}`;
+  const ag=document.getElementById('againBtn');
+  if(ag) ag.onclick = ()=>{ if(solo) startGame(); else backToLobby(); };
+  document.getElementById('homeBtn').onclick = ()=>{ if(solo){ G=null; solo=false; isHost=false; screen='home'; render(); } else leaveRoom(); };
+}
+
+/* ================= 起動 ================= */
+setInterval(()=>{ updateTimer(); hostTick(); }, 300);
+initFirebase();
+render();
+})();
+
+</script>
+</body>
+</html>
