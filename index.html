@@ -151,6 +151,10 @@ td.neg{color:#ff8f7d;font-weight:700}
 .rulewin.bonus{border-color:var(--you);box-shadow:0 0 18px rgba(127,227,255,.25)}
 .timer.danger{color:#ff7a68}
 @media (prefers-reduced-motion: no-preference){ .timer.danger{animation:tblink .5s steps(2,start) infinite} @keyframes tblink{50%{opacity:.35}} }
+/* ---- これまでのラウンド ---- */
+.past .pastitem{display:flex;flex-direction:column;gap:2px;padding-top:6px;border-top:1px solid var(--line)}
+.past .pastitem:first-of-type{border-top:none;padding-top:0}
+.past .chart{width:auto;max-width:100%;max-height:150px;margin:0 auto}
 /* ---- ブービー賞 ---- */
 .booby{display:inline-block;font-size:.72rem;font-weight:700;color:#1a1030;background:#c9a2ff;border-radius:4px;padding:0 6px;margin-left:6px}
 .boobywin{border-color:#c9a2ff}
@@ -199,7 +203,7 @@ const ROOT = 'games/crowd/rooms';
 const ROOM_TTL = 6*60*60*1000;   // 6時間たった部屋コードは再利用できる
 
 /* ================= ルール・統計 ================= */
-const ROUNDS = 5, MIN_N = 10, MAX_N = 50, BONUS_P = 0.06;   // ボーナスは各ラウンド6%（1ゲームで出るのは約4回に1回）
+const ROUNDS = 5, MIN_N = 15, MAX_N = 50, BONUS_P = 0.10;   // ボーナスは最終ラウンド（ラウンド5）にだけ、10%の確率で出る
 const POINTS = (r,n) => Math.max(0, n-2*(r-1));                 // 上位：1位＝人数、2点刻み
 const PENALTY = (b,n) => Math.min(0, -(n-4*(b-1)));             // 下位：ビリ＝−人数、4点刻み（b＝下から何番目）
 const scoreLimit = n => Math.ceil(n/2);
@@ -236,8 +240,8 @@ const BONUS = {id:'bonus', name:'ボーナス：だれとも被らなければ�
 const ruleOf = id => id==='bonus' ? BONUS : (RULES.find(r=>r.id===id) || RULES[0]);
 function makeOrder(){
   const o = shuffle(RULES.map(r=>r.id)).slice(0,ROUNDS);
-  let used=false;
-  return o.map(id=>{ if(!used && Math.random()<BONUS_P){ used=true; return 'bonus'; } return id; });
+  if(Math.random()<BONUS_P) o[ROUNDS-1]='bonus';   // ボーナスはラウンド5だけ
+  return o;
 }
 /* vals：今回の数（席順）、all：最初の数字＋今回の数の全データ。統計は全データで計算し、順位は今回の数だけでつける */
 function judge(vals, all, rule){
@@ -531,9 +535,9 @@ function startGame(){
   const n = Math.max(HOST.target, list.length), gid=Date.now();
   HOST.closing = false; ANCH.gid=null; ANCH.vals=null; myAnchor=null;
   if(!solo) roomRef('picks').remove().catch(()=>{});
-  commit({gid, phase:'anchor', n, limit: solo?0:HOST.limit, round:0, order:makeOrder(),
+  commit({gid, phase:'anchor', allHist:[], n, limit: solo?0:HOST.limit, round:0, order:makeOrder(),
     seats:list, cpu:cpuTypesFor(n-list.length), totals:new Array(n).fill(0),
-    banned:[], hist:[], picked:0, endsAt: solo?0:now()+HOST.limit*1000});
+    banned:[], hist:[], allHist:[], picked:0, endsAt: solo?0:now()+HOST.limit*1000});
 }
 function syncPickWatch(){
   if(!G || (G.phase!=='pick' && G.phase!=='anchor')){ stopPickWatch(); return; }
@@ -606,7 +610,7 @@ async function closeRound(picks){
   const hist = arr(G.hist).map(arr); hist.push(vals);
   const winNums = winnersOf(vals, r);
   const banned = Array.from(new Set(arr(G.banned).concat(winNums))).sort((a,b)=>a-b);
-  commit(Object.assign({}, G, {phase:'result', vals, all:r.all.slice().sort((a,b)=>a-b), subs:sub, totals:tot, hist, banned, winNums, prevWin:winNums, picked:h-sub.length}));
+  commit(Object.assign({}, G, {phase:'result', vals, all:r.all.slice().sort((a,b)=>a-b), subs:sub, totals:tot, hist, allHist: arr(G.allHist).map(arr).concat([r.all.slice().sort((a,b)=>a-b)]), banned, winNums, prevWin:winNums, picked:h-sub.length}));
   setTimeout(()=>{ HOST.closing=false; }, 1500);
 }
 function nextRound(){
@@ -644,7 +648,7 @@ function rulesWin(){
     <p>はじめに全員が「最初の数字」を1つ入れる。この数字はほかの人には秘密のまま、5ラウンドすべてのデータに入る。毎ラウンド0〜100の整数を全員で同時に出し、全データ（最初の数字＋今回の数）から決まる目標に近い順に得点。</p>
     <p class="note">上位：1位は人数と同じ点、2点ずつ減って人数の半分の順位まで。下位：ビリは −人数点、4点ずつ軽くなって下位約25%まで減点（合計は0点より下がらない）。ビリから2番目にはブービー賞。</p>
     <p class="note">使えない数：自分の最初の数字、自分が前に使った数、過去のラウンドで1位を取った数（全員）。</p>
-    <div class="rules">${RULES.map(r=>`<div><b>${r.short}</b>${r.desc}</div>`).join('')}<div><b>ボーナス（まれ）</b>${BONUS.desc}被らなければ、その数がそのまま得点。</div></div>
+    <div class="rules">${RULES.map(r=>`<div><b>${r.short}</b>${r.desc}</div>`).join('')}<div><b>ボーナス（ラウンド5にまれに）</b>${BONUS.desc}被らなければ、その数がそのまま得点。</div></div>
   </section>`;
 }
 function renderHome(){
@@ -767,6 +771,25 @@ function banHtml(){
     <div class="legend"><span><i class="lg mine"></i>あなたの最初の数字</span><span><i class="lg used"></i>あなたが使った数</span><span><i class="lg top1"></i>過去の1位の数</span></div>
   </section>`;
 }
+/* これまでのラウンドのヒストグラムと箱ひげ図（ラウンド1から順に） */
+function pastHtml(){
+  const hist=arr(G.hist).map(arr), allH=arr(G.allHist).map(arr), order=arr(G.order), mi=myIdx();
+  if(!hist.length) return '';
+  return `<section class="win past">
+    <span class="cap">これまでのラウンド</span>
+    ${hist.map((vals,k)=>{
+      const all=allH[k]; if(!all || all.length!==G.n*2) return '';
+      const rule=ruleOf(order[k]), r=judge(vals, all, rule);
+      const mine = mi>=0 ? vals[mi] : null;
+      const wins = vals.filter((v,i)=>r.rank[i]===1 && (!r.bonus || r.pts[i]>0));
+      return `<div class="pastitem">
+        <div class="row"><b class="num">ROUND ${k+1}</b><span class="dim" style="font-size:.82rem">${rule.short}${r.t!=null?` ・ ${rule.mode==='far'?'基準':'目標'} ${f(r.t)}`:''}${wins.length?` ・ 1位 ${Array.from(new Set(wins)).join(', ')}`:''}${mine!=null?` ・ あなた ${mine}`:''}</span></div>
+        ${chart(all, r, rule, mine)}
+      </div>`;
+    }).join('')}
+    <div class="legend"><span><i style="background:var(--bar)"></i>全データ ${G.n*2}個の度数</span><span><i style="background:var(--gold)"></i>目標</span><span><i style="background:var(--you)"></i>あなたの数</span></div>
+  </section>`;
+}
 function renderPick(){
   const anchorPhase = G.phase==='anchor';
   const rule = anchorPhase ? null : ruleOf(arr(G.order)[G.round]), i = myIdx(), done = submittedKey===roundKey();
@@ -788,7 +811,8 @@ function renderPick(){
   ${topbar(anchorPhase ? 'FIRST NUMBER' : `ROUND ${G.round+1} / ${ROUNDS}`)}
   ${card}
   ${anchorPhase?'':banHtml()}
-  ${abortHtml()}</div><div class="col">${i<0 ? `<section class="win">
+  ${abortHtml()}
+  ${anchorPhase?'':pastHtml()}</div><div class="col">${i<0 ? `<section class="win">
       ${timed?`<div class="row"><span class="status">${isHost?'挑戦者の提出を待っています':'このゲームは観戦です。次のゲームから参加できます'}</span><span class="timer" id="timer"></span></div>`:''}
       <p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出</p>
     </section>` : `
