@@ -139,6 +139,23 @@ td .tag{font-size:.72rem;color:var(--dim);margin-left:4px}
 .check input{width:20px;height:20px;accent-color:var(--gold)}
 .offline{font-size:.8rem;color:var(--dim);text-align:center}
 
+/* ---- 使えない数・減点・ボーナス ---- */
+.nchips{display:flex;flex-wrap:wrap;gap:6px}
+.nchip{font-family:var(--f-num);font-weight:600;font-size:.9rem;border-radius:6px;padding:2px 10px;border:1px solid var(--line);text-decoration:line-through;text-decoration-thickness:2px}
+.nchip.mine{border-color:var(--you);color:var(--you)}
+.nchip.used{color:var(--dim)}
+.nchip.top1{border-color:var(--gold);color:var(--gold)}
+.legend i.lg{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:2px solid var(--line)}
+.legend i.lg.mine{border-color:var(--you)} .legend i.lg.top1{border-color:var(--gold)}
+td.neg{color:#ff8f7d;font-weight:700}
+.rulewin.bonus{border-color:var(--you);box-shadow:0 0 18px rgba(127,227,255,.25)}
+.timer.danger{color:#ff7a68}
+@media (prefers-reduced-motion: no-preference){ .timer.danger{animation:tblink .5s steps(2,start) infinite} @keyframes tblink{50%{opacity:.35}} }
+/* ---- ブービー賞 ---- */
+.booby{display:inline-block;font-size:.72rem;font-weight:700;color:#1a1030;background:#c9a2ff;border-radius:4px;padding:0 6px;margin-left:6px}
+.boobywin{border-color:#c9a2ff}
+.boobywin .cap{color:#c9a2ff}
+.booby-names{font-family:var(--f-title);font-weight:800;font-size:1.3rem;margin:0}
 /* ---- 途中でやめる ---- */
 .cmd.abort{font-size:.92rem;color:var(--dim);border:1px dashed var(--line);border-radius:6px;padding-left:12px;text-align:center}
 .cmd.abort::before{display:none}
@@ -182,63 +199,158 @@ const ROOT = 'games/crowd/rooms';
 const ROOM_TTL = 6*60*60*1000;   // 6時間たった部屋コードは再利用できる
 
 /* ================= ルール・統計 ================= */
-const ROUNDS = 5, MIN_N = 20, MAX_N = 50;
-const POINTS = (r,n) => Math.max(0, n-2*(r-1));
+const ROUNDS = 5, MIN_N = 10, MAX_N = 50, BONUS_P = 0.06;   // ボーナスは各ラウンド6%（1ゲームで出るのは約4回に1回）
+const POINTS = (r,n) => Math.max(0, n-2*(r-1));                 // 上位：1位＝人数、2点刻み
+const PENALTY = (b,n) => Math.min(0, -(n-4*(b-1)));             // 下位：ビリ＝−人数、4点刻み（b＝下から何番目）
 const scoreLimit = n => Math.ceil(n/2);
+const penaltyCount = n => Math.ceil(n/4);
 function medianSorted(a){ const n=a.length, h=Math.floor(n/2); return n%2 ? a[h] : (a[h-1]+a[h])/2; }
 function stats(vals){
   const s = vals.slice().sort((a,b)=>a-b), n = s.length, sum = s.reduce((a,b)=>a+b,0), h = Math.floor(n/2);
-  return {sorted:s, n, sum, mean:sum/n, median:medianSorted(s), q1:medianSorted(s.slice(0,h)), q3:medianSorted(s.slice(n%2?h+1:h)), half:h, min:s[0], max:s[n-1]};
+  const cnt = {}; s.forEach(v=>cnt[v]=(cnt[v]||0)+1);
+  const top = Math.max(...Object.values(cnt));
+  const modes = Object.keys(cnt).filter(k=>cnt[k]===top).map(Number).sort((a,b)=>a-b);
+  const mode = modes.reduce((a,b)=>a+b,0)/modes.length;
+  return {sorted:s, n, sum, mean:sum/n, median:medianSorted(s), q1:medianSorted(s.slice(0,h)), q3:medianSorted(s.slice(n%2?h+1:h)), half:h, min:s[0], max:s[n-1], modes, modeCount:top, mode, cnt};
 }
 const f = x => (Math.round(x*100)/100).toString();
 function medianText(st){
   const n=st.n, s=st.sorted;
   return n%2 ? `${(n+1)/2}番目 = ${st.median}` : `${n/2}番目と${n/2+1}番目の平均 = (${s[n/2-1]} + ${s[n/2]}) ÷ 2 = ${f(st.median)}`;
 }
-const RULES = [
-  {id:'median', name:'中央値に一番近い人', short:'中央値', desc:'全員の数を小さい順に並べた真ん中。', mode:'near', target:s=>s.median, tf:s=>`目標 = 中央値 = ${f(s.median)}`},
-  {id:'mean', name:'平均値に一番近い人', short:'平均値', desc:'全員の合計 ÷ 人数。', mode:'near', target:s=>s.mean, tf:s=>`目標 = 平均値 = ${f(s.mean)}`},
-  {id:'twothirds', name:'平均値の 2/3 に一番近い人', short:'平均×2/3', desc:'みんなが読み合うと、どこまで下がる？', mode:'near', target:s=>s.mean*2/3, tf:s=>`目標 = ${f(s.mean)} × 2/3 = ${f(s.mean*2/3)}`},
-  {id:'q1', name:'第1四分位数に一番近い人', short:'Q1', desc:'下位半分のデータの中央値。', mode:'near', target:s=>s.q1, tf:s=>`目標 = Q1 = ${f(s.q1)}（下位${s.half}個の中央値）`},
-  {id:'q3', name:'第3四分位数に一番近い人', short:'Q3', desc:'上位半分のデータの中央値。', mode:'near', target:s=>s.q3, tf:s=>`目標 = Q3 = ${f(s.q3)}（上位${s.half}個の中央値）`},
-  {id:'far', name:'平均値から一番遠い人', short:'外れ値', desc:'目立った者勝ち。でも全員が端に行くと…？', mode:'far', target:s=>s.mean, tf:s=>`基準 = 平均値 = ${f(s.mean)}（遠いほど上位）`},
-];
-const ruleOf = id => RULES.find(r=>r.id===id) || RULES[0];
-function judge(vals, rule){
-  const st = stats(vals), t = rule.target(st), n = vals.length;
-  const d = vals.map(v=>Math.abs(v-t));
-  const sorted = d.slice().sort((a,b)=> rule.mode==='near' ? a-b : b-a);
-  const rank = d.map(x=>{
-    let lo=0, hi=n;
-    while(lo<hi){ const m=(lo+hi)>>1; const better = rule.mode==='near' ? sorted[m] < x-1e-9 : sorted[m] > x+1e-9; if(better) lo=m+1; else hi=m; }
-    return lo+1;
-  });
-  return {st, t, d, rank, pts:rank.map(r=>POINTS(r,n))};
+function modeText(st){
+  if(st.modeCount===1) return `どの数も1回ずつ → 全部が最頻値。その平均 = ${f(st.mode)}`;
+  if(st.modes.length===1) return `${st.modes[0]}（${st.modeCount}回）`;
+  return `${st.modes.join(', ')}（各${st.modeCount}回）→ 平均 ${f(st.mode)}`;
 }
+const RULES = [
+  {id:'median', name:'中央値に一番近い人', short:'中央値', desc:'全データを小さい順に並べた真ん中。', mode:'near', target:s=>s.median, tf:s=>`目標 = 中央値 = ${f(s.median)}`},
+  {id:'mean', name:'平均値に一番近い人', short:'平均値', desc:'全データの合計 ÷ 個数。', mode:'near', target:s=>s.mean, tf:s=>`目標 = 平均値 = ${f(s.mean)}`},
+  {id:'twothirds', name:'平均値の 2/3 に一番近い人', short:'平均×2/3', desc:'みんなが読み合うと、どこまで下がる？', mode:'near', target:s=>s.mean*2/3, tf:s=>`目標 = ${f(s.mean)} × 2/3 = ${f(s.mean*2/3)}`},
+  {id:'onethird', name:'平均値の 1/3 に一番近い人', short:'平均×1/3', desc:'2/3よりさらに下。でも最初の数字は動かない。', mode:'near', target:s=>s.mean/3, tf:s=>`目標 = ${f(s.mean)} × 1/3 = ${f(s.mean/3)}`},
+  {id:'far', name:'平均値から一番遠い人', short:'外れ値', desc:'目立った者勝ち。でも全員が端に行くと…？', mode:'far', target:s=>s.mean, tf:s=>`基準 = 平均値 = ${f(s.mean)}（遠いほど上位）`},
+  {id:'q1x2', name:'第1四分位数の 2倍 に一番近い人', short:'Q1×2', desc:'下位半分のデータの中央値を2倍した値。', mode:'near', target:s=>s.q1*2, tf:s=>`目標 = Q1 × 2 = ${f(s.q1)} × 2 = ${f(s.q1*2)}`},
+  {id:'modehalf', name:'最頻値の 半分 に一番近い人', short:'最頻値÷2', desc:'一番多く出た数の半分。複数あるときはその平均。', mode:'near', target:s=>s.mode/2, tf:s=>`目標 = 最頻値 ÷ 2 = ${f(s.mode)} ÷ 2 = ${f(s.mode/2)}`},
+];
+const BONUS = {id:'bonus', name:'ボーナス：だれとも被らなければ、その数がそのまま得点', short:'ボーナス', desc:'最初の数字も含めて、同じ数がほかに1つもなければ成功。', mode:'bonus', target:()=>0, tf:()=>'被らなかった数 ＝ 得点'};
+const ruleOf = id => id==='bonus' ? BONUS : (RULES.find(r=>r.id===id) || RULES[0]);
+function makeOrder(){
+  const o = shuffle(RULES.map(r=>r.id)).slice(0,ROUNDS);
+  let used=false;
+  return o.map(id=>{ if(!used && Math.random()<BONUS_P){ used=true; return 'bonus'; } return id; });
+}
+/* vals：今回の数（席順）、all：最初の数字＋今回の数の全データ。統計は全データで計算し、順位は今回の数だけでつける */
+function judge(vals, all, rule){
+  const st = stats(all), n = vals.length;
+  if(rule.mode==='bonus'){
+    const pts = vals.map(v=> st.cnt[v]===1 ? v : 0);
+    const rank = pts.map(p=>1+pts.filter(q=>q>p).length);
+    return {st, t:null, d:pts, rank, pts, bonus:true, all};
+  }
+  const t = rule.target(st);
+  const d = vals.map(v=>Math.abs(v-t));
+  const better = (a,b)=> rule.mode==='near' ? a<b-1e-9 : a>b+1e-9;
+  const rank = d.map(x=>1+d.filter(y=>better(y,x)).length);
+  const low  = d.map(x=>1+d.filter(y=>better(x,y)).length);      // 下から何番目
+  const pts = rank.map((r,i)=>{ const p=POINTS(r,n); return p>0 ? p : PENALTY(low[i],n); });
+  return {st, t, d, rank, pts, all};
+}
+/* 1位の数（次のラウンドから全員使えない） */
+function winnersOf(vals, r){ const out=[]; vals.forEach((v,i)=>{ if(r.rank[i]===1 && (!r.bonus || r.pts[i]>0) && !out.includes(v)) out.push(v); }); return out; }
 
 /* ================= CPU ================= */
 const rint=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
 const clamp=x=>Math.max(0,Math.min(100,Math.round(x)));
 const gauss=()=>{ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
 const shuffle=a=>{ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
-const TYPES = { r:{label:'気まぐれ',w:.22}, f:{label:'好きな数派',w:.10}, n:{label:'セオリー派',w:.30}, l:{label:'読み合い派',w:.20}, e:{label:'学習派',w:.18} };
-const FAVS=[0,7,13,33,42,50,50,50,77,99,100];
-function pickType(){ let r=Math.random(), acc=0; for(const k in TYPES){ acc+=TYPES[k].w; if(r<acc) return k; } return 'n'; }
-function estimate(rule, n, sampler){
-  let sum=0; const K=12;
-  for(let k=0;k<K;k++){ const v=[]; for(let i=0;i<n;i++) v.push(sampler()); sum+=rule.target(stats(v)); }
+const TYPES = {
+  m:{label:'まじめ',w:.30},      // セオリー通り
+  g:{label:'ゲーマー',w:.22},    // 読み合い
+  k:{label:'気まぐれ',w:.20},    // 好きな数に寄る
+  p:{label:'サイコパス',w:.13},  // 完全ランダム
+  b:{label:'ギャンブラー',w:.15},// 逆張り
+  y:{label:'ギャル',w:.1},       // ものまね：前のラウンドの1位の数のすぐ隣
+  s:{label:'ガリ勉',w:.1},       // 学習：過去のデータから目標を予想
+  a:{label:'天邪鬼',w:.1},       // 前に自分が出した数の反対側
+  i:{label:'一途',w:.1},         // 自分の最初の数字のすぐ隣を出し続ける
+  c:{label:'カリスマ',w:.1},     // 一番強い：読み合いをさらに一段深く
+  z:{label:'潔癖症',w:.1},       // キリのいい数しか出さない
+};
+const KIRI=[0,10,20,25,30,40,50,60,70,75,80,90,100];
+const nearKiri = x => KIRI.reduce((a,b)=>Math.abs(b-x)<Math.abs(a-x)?b:a);
+const FAVS=[0,3,7,13,17,21,33,42,50,50,64,77,88,99,100];
+/* CPUの性格は5種類が均等になるように配る */
+function cpuTypesFor(k){ const keys=Object.keys(TYPES), out=[]; for(let i=0;i<k;i++) out.push(keys[i%keys.length]); return shuffle(out).join(''); }
+function pickType(){ let r=Math.random(), acc=0; for(const k in TYPES){ acc+=TYPES[k].w; if(r<acc) return k; } return 'm'; }
+/* 使える数の中で、ねらいに一番近い数 */
+function nearestAllowed(x, banned){
+  x=clamp(x); if(!banned.has(x)) return x;
+  for(let d=1; d<=100; d++){ const a=[x-d,x+d].filter(v=>v>=0&&v<=100&&!banned.has(v)); if(a.length) return a[rint(0,a.length-1)]; }
+  return x;
+}
+function randomAllowed(banned){ const a=[]; for(let v=0;v<=100;v++) if(!banned.has(v)) a.push(v); return a.length ? a[rint(0,a.length-1)] : rint(0,100); }
+function cpuAnchor(t){
+  if(t==='m') return clamp(50+gauss()*15);
+  if(t==='g') return rint(0,100);
+  if(t==='k') return FAVS[rint(0,FAVS.length-1)];
+  if(t==='p') return rint(0,100);
+  if(t==='b') return Math.random()<.5 ? rint(0,5) : rint(95,100);     // ギャンブラーは端に置いてデータを揺さぶる
+  if(t==='y') return clamp(50+gauss()*20);
+  if(t==='i') return FAVS[rint(0,FAVS.length-1)];
+  if(t==='z') return KIRI[rint(0,KIRI.length-1)];
+  return rint(0,100);   // ガリ勉・天邪鬼・カリスマ
+}
+function estimate(rule, n2, sampler){
+  let sum=0; const K=10;
+  for(let k=0;k<K;k++){ const v=[]; for(let i=0;i<n2;i++) v.push(sampler()); sum+=rule.target(stats(v)); }
   return sum/K;
 }
-function cpuPicks(rule, n, last, types){
-  const uni=()=>rint(0,100);
-  const naiveEst = estimate(rule, n, uni);
-  const level2Est = estimate(rule, n, ()=> Math.random()<.35 ? uni() : clamp(naiveEst + gauss()*10));
-  const learnEst = last && last.length ? estimate(rule, n, ()=>clamp(last[rint(0,last.length-1)] + gauss()*6)) : naiveEst;
-  const aim = (est, sd)=>{
-    if(rule.mode==='far'){ const side = est>=50 ? 0 : 100; return clamp(side===0 ? Math.abs(gauss())*sd*1.5 : 100-Math.abs(gauss())*sd*1.5); }
-    return clamp(est + gauss()*sd);
-  };
-  return types.map(t=> t==='r' ? uni() : t==='f' ? FAVS[rint(0,FAVS.length-1)] : t==='n' ? aim(naiveEst,11) : t==='l' ? aim(level2Est,9) : t==='e' ? aim(learnEst,10) : uni());
+/* types：席ごとの性格、bans：席ごとの使えない数（Set）
+   ctx：{anc:[席ごとの最初の数字], last:[席ごとの前回の数], prevWin:[前回の1位の数], past:[過去ラウンドに出た数すべて]} */
+function cpuPicks(rule, n, types, bans, ctx){
+  ctx = ctx || {};
+  const uni=()=>rint(0,100), n2=n*2, past=ctx.past||[], prevWin=ctx.prevWin||[];
+  let naive=50, l2=50, l3=50, learn=50;
+  if(rule.mode!=='bonus'){
+    naive = estimate(rule, n2, uni);
+    l2 = estimate(rule, n2, ()=> Math.random()<.5 ? uni() : clamp(naive + gauss()*10));
+    l3 = estimate(rule, n2, ()=> Math.random()<.5 ? uni() : clamp(l2 + gauss()*6));
+    learn = past.length ? estimate(rule, n2, ()=> Math.random()<.5 ? uni() : clamp(past[rint(0,past.length-1)] + gauss()*5)) : naive;
+  }
+  return types.map((t,j)=>{
+    let x;
+    const anc = ctx.anc ? ctx.anc[j] : null, last = ctx.last ? ctx.last[j] : null;
+    // 新しい性格（どの問題でも同じ考え方で動く）
+    if(t==='y'){ x = prevWin.length ? prevWin[rint(0,prevWin.length-1)] + (Math.random()<.5?-1:1)*rint(1,2) : clamp(naive+gauss()*12); return nearestAllowed(x, bans[j]); }
+    if(t==='a'){ x = typeof last==='number' ? clamp(100-last+gauss()*5) : uni(); return nearestAllowed(x, bans[j]); }
+    if(t==='i'){ x = typeof anc==='number' ? anc + (Math.random()<.5?-1:1)*rint(1,3) : uni(); return nearestAllowed(x, bans[j]); }
+    if(t==='z'){
+      const want = rule.mode==='bonus' ? KIRI[rint(0,KIRI.length-1)] : rule.mode==='far' ? (Math.random()<.5?0:100) : nearKiri(naive);
+      const ok = KIRI.filter(v=>!bans[j].has(v));
+      x = ok.length ? ok.reduce((a,b)=>Math.abs(b-want)<Math.abs(a-want)?b:a) : want;
+      return nearestAllowed(x, bans[j]);
+    }
+    if(t==='s'){
+      x = rule.mode==='bonus' ? rint(60,99) : rule.mode==='far' ? (learn>=50 ? clamp(Math.abs(gauss())*6) : clamp(100-Math.abs(gauss())*6)) : clamp(learn+gauss()*6);
+      return nearestAllowed(x, bans[j]);
+    }
+    if(t==='c'){
+      if(rule.mode==='bonus'){ do{ x=rint(61,99); } while(x%5===0 || FAVS.includes(x)); }
+      else if(rule.mode==='far'){ x = naive>=50 ? rint(0,3) : rint(97,100); }
+      else x = clamp(l3+gauss()*4);
+      return nearestAllowed(x, bans[j]);
+    }
+    if(rule.mode==='bonus'){
+      x = t==='m' ? rint(55,100) : t==='g' ? rint(80,99) : t==='k' ? FAVS[rint(0,FAVS.length-1)] : t==='b' ? rint(90,100) : uni();
+    } else if(rule.mode==='far'){
+      x = t==='p' ? uni() : t==='k' ? FAVS[rint(0,FAVS.length-1)] : t==='b' ? clamp(50+gauss()*8)
+        : (Math.random()<.5 ? clamp(Math.abs(gauss())*12) : clamp(100-Math.abs(gauss())*12));
+    } else {
+      x = t==='m' ? clamp(naive+gauss()*11) : t==='g' ? clamp(l2+gauss()*8) : t==='k' ? clamp(FAVS[rint(0,FAVS.length-1)]+gauss()*4)
+        : t==='p' ? uni() : (Math.random()<.5 ? clamp(100-naive+gauss()*10) : (Math.random()<.5 ? rint(0,8) : rint(92,100)));
+    }
+    return nearestAllowed(x, bans[j]);
+  });
 }
 
 /* ================= 共通 ================= */
@@ -261,18 +373,18 @@ let meta = null, players = {}, G = null;
 let isHost = false, hostPlays = true;
 let myPick = 50, submittedKey = '', homeErr = '';
 let unsub = [];
-const HOST = {target:30, limit:10, closing:false, pickCount:0, pickRef:null};
+const HOST = {target:30, limit:30, closing:false, pickCount:0, pickRef:null};
 let soloPick = null;
 
 const me = () => solo ? 'solo-me' : uid;
 const seats = () => G ? arr(G.seats) : [];
 const H = () => seats().length;
 const myIdx = () => seats().findIndex(s=>s && s[0]===me());
-const roundKey = () => G ? `g${G.gid}r${G.round}` : '';
+const roundKey = () => G ? (G.phase==='anchor' ? `g${G.gid}a` : `g${G.gid}r${G.round}`) : '';
 const totals = () => arr(G.totals);
 const subs = () => arr(G.subs);
 const seatName = i => i<H() ? seats()[i][1] : `CPU-${String(i-H()+1).padStart(2,'0')}`;
-const seatTag = i => i<H() ? (subs().includes(i) ? '代役CPU' : '') : (TYPES[(G.cpu||'')[i-H()]]||{label:''}).label;
+const seatTag = i => i<H() ? (subs().includes(i) ? '時間切れ' : '') : (TYPES[(G.cpu||'')[i-H()]]||{label:''}).label;
 const rankOf = i => 1 + totals().filter(t=>t>totals()[i]).length;
 const roomRef = p => db.ref(`${ROOT}/${code}${p?'/'+p:''}`);
 
@@ -364,12 +476,16 @@ function onState(s){
     return;
   }
   G = s;
-  if(G.gid!==prevGid || G.round!==prevRound){ myPick = 50; }
+  if(G.gid!==prevGid){ myAnchor=null; }
+  if(G.gid!==prevGid || G.round!==prevRound || G.phase!==prevPhase){ if(G.phase==='pick'||G.phase==='anchor') myPick = 50; }
+  if(G.phase!=='anchor' && myAnchor==null && !solo && myIdx()>=0){
+    roomRef(`picks/g${G.gid}a/${uid}`).get().then(x=>{ if(x.exists()){ myAnchor=x.val(); if(G && G.phase==='pick') render(); } }).catch(()=>{});
+  }
   if(isHost) syncPickWatch();
   const changed = screen!=='game' || prevPhase!==G.phase || prevRound!==G.round || prevGid!==G.gid;
   screen='game';
   if(changed){
-    if(G.phase==='pick' && myIdx()>=0 && submittedKey!==roundKey() && !solo) checkMyPick();
+    if((G.phase==='pick'||G.phase==='anchor') && myIdx()>=0 && submittedKey!==roundKey() && !solo) checkMyPick();
     render(); window.scrollTo(0,0);
   } else patchCounts();
 }
@@ -387,8 +503,21 @@ function commit(next){
 }
 function onSoloState(next){
   const prev = G; G = next; screen='game';
-  if(!prev || prev.phase!==G.phase || prev.round!==G.round){ if(G.phase==='pick'){ myPick=50; soloPick=null; } render(); window.scrollTo(0,0); }
+  if(!prev || prev.phase!==G.phase || prev.round!==G.round){ if(G.phase==='pick'||G.phase==='anchor'){ myPick=50; soloPick=null; } render(); window.scrollTo(0,0); }
 }
+/* ---- 最初の数字（ホストだけが持つ。オンラインでは picks/g{gid}a に保存） ---- */
+const ANCH = {gid:null, vals:null};
+const anchorKey = () => G ? `g${G.gid}a` : '';
+/* 席 i が使えない数：自分の最初の数字・自分が使った数・過去の1位の数 */
+function bannedFor(i, ancOfI){
+  const b = new Set(arr(G.banned));
+  if(typeof ancOfI==='number') b.add(ancOfI);
+  arr(G.hist).forEach(row=>{ const v=arr(row)[i]; if(typeof v==='number') b.add(v); });
+  return b;
+}
+let myAnchor = null;     // 自分の最初の数字（自分だけが知っている）
+function myBanned(){ const i=myIdx(); return i<0 ? new Set() : bannedFor(i, myAnchor); }
+
 function startGame(){
   let list;
   if(solo) list = [['solo-me', nick||'あなた']];
@@ -399,15 +528,15 @@ function startGame(){
     list = list.slice(0, MAX_N);
     if(!list.length) return;
   }
-  const n = Math.max(HOST.target, list.length);
-  HOST.closing = false;
+  const n = Math.max(HOST.target, list.length), gid=Date.now();
+  HOST.closing = false; ANCH.gid=null; ANCH.vals=null; myAnchor=null;
   if(!solo) roomRef('picks').remove().catch(()=>{});
-  commit({gid:Date.now(), phase:'pick', n, limit: solo?0:HOST.limit, round:0, order:shuffle(RULES.map(r=>r.id)).slice(0,ROUNDS),
-    seats:list, cpu:Array.from({length:n-list.length}, pickType).join(''), totals:new Array(n).fill(0),
-    picked:0, endsAt: solo?0:now()+HOST.limit*1000});
+  commit({gid, phase:'anchor', n, limit: solo?0:HOST.limit, round:0, order:makeOrder(),
+    seats:list, cpu:cpuTypesFor(n-list.length), totals:new Array(n).fill(0),
+    banned:[], hist:[], picked:0, endsAt: solo?0:now()+HOST.limit*1000});
 }
 function syncPickWatch(){
-  if(!G || G.phase!=='pick'){ stopPickWatch(); return; }
+  if(!G || (G.phase!=='pick' && G.phase!=='anchor')){ stopPickWatch(); return; }
   const path = `picks/${roundKey()}`;
   if(HOST.pickRef && HOST.pickRef._p===path) return;
   stopPickWatch();
@@ -416,43 +545,73 @@ function syncPickWatch(){
     const v = s.val()||{};
     const c = seats().filter(x=>x[0] in v).length;
     HOST.pickCount = c;
-    if(G && G.phase==='pick' && c!==G.picked) roomRef('state/picked').set(c).catch(()=>{});
+    if(G && (G.phase==='pick'||G.phase==='anchor') && c!==G.picked) roomRef('state/picked').set(c).catch(()=>{});
   };
   ref.on('value', fn, ()=>{}); ref._fn = fn; HOST.pickRef = ref;
 }
 function stopPickWatch(){ if(HOST.pickRef){ HOST.pickRef.off('value', HOST.pickRef._fn); HOST.pickRef=null; } }
 async function hostTick(){
-  if(!G || G.phase!=='pick' || HOST.closing) return;
-  if(solo){ if(soloPick!==null) closeRound({'solo-me':soloPick}); return; }
+  if(!G || (G.phase!=='pick' && G.phase!=='anchor') || HOST.closing) return;
+  if(solo){ if(soloPick!==null){ HOST.closing=true; const p={'solo-me':soloPick}; soloPick=null; G.phase==='anchor' ? closeAnchor(p) : closeRound(p); } return; }
   if(!isHost) return;
   if(HOST.pickCount>=H() || now()>=G.endsAt){
     HOST.closing = true;
     let picks = {};
     try{ picks = (await roomRef(`picks/${roundKey()}`).get()).val()||{}; }catch(e){}
-    closeRound(picks);
+    G.phase==='anchor' ? closeAnchor(picks) : closeRound(picks);
   }
 }
-function closeRound(picks){
+/* 最初の数字を確定：未入力の人はランダム、CPUは性格どおり */
+function closeAnchor(picks){
+  const n=G.n, h=H(), st=seats(), anc=new Array(n);
+  st.forEach((s,i)=>{ const v=picks[s[0]]; anc[i] = (typeof v==='number' && v>=0 && v<=100) ? Math.round(v) : rint(0,100); });
+  for(let i=h;i<n;i++) anc[i]=cpuAnchor((G.cpu||'')[i-h]||'m');
+  ANCH.gid=G.gid; ANCH.vals=anc;
+  if(!solo){
+    const map={}; anc.forEach((v,i)=>{ map[i<h ? st[i][0] : 'cpu'+i]=v; });
+    roomRef(`picks/${anchorKey()}`).set(map).catch(()=>{});
+  }
+  commit(Object.assign({}, G, {phase:'pick', round:0, picked:0, vals:null, subs:null, endsAt: solo?0:now()+G.limit*1000}));
+  setTimeout(()=>{ HOST.closing=false; }, 1200);
+}
+async function loadAnchors(){
+  if(ANCH.gid===G.gid && ANCH.vals) return ANCH.vals;
+  const n=G.n, h=H(), st=seats(), anc=new Array(n).fill(50);
+  try{
+    const m=(await roomRef(`picks/${anchorKey()}`).get()).val()||{};
+    for(let i=0;i<n;i++){ const v=m[i<h ? st[i][0] : 'cpu'+i]; if(typeof v==='number') anc[i]=v; }
+  }catch(e){}
+  ANCH.gid=G.gid; ANCH.vals=anc; return anc;
+}
+async function closeRound(picks){
   HOST.closing = true;
+  const anc = await loadAnchors();
   const rule = ruleOf(arr(G.order)[G.round]), n = G.n, h = H(), st = seats();
-  const vals = new Array(n), sub = [], idx = [], types = [];
+  const vals = new Array(n), sub = [], cpuIdx = [], cpuTypes = [], cpuBans = [];
   st.forEach((s,i)=>{
-    const v = picks[s[0]];
-    if(typeof v==='number' && v>=0 && v<=100) vals[i] = Math.round(v);
-    else { sub.push(i); idx.push(i); types.push('e'); }
+    const v = picks[s[0]], ban = bannedFor(i, anc[i]);
+    if(typeof v==='number' && v>=0 && v<=100 && !ban.has(Math.round(v))) vals[i] = Math.round(v);
+    else { sub.push(i); vals[i] = randomAllowed(ban); }           // 時間切れは完全ランダム
   });
-  for(let i=h;i<n;i++){ idx.push(i); types.push((G.cpu||'')[i-h]||'n'); }
-  const cp = cpuPicks(rule, n, arr(G.lastVals), types);
-  idx.forEach((ix,k)=>vals[ix]=cp[k]);
-  const r = judge(vals, rule);
+  for(let i=h;i<n;i++){ cpuIdx.push(i); cpuTypes.push((G.cpu||'')[i-h]||'m'); cpuBans.push(bannedFor(i, anc[i])); }
+  const prevRow = arr(arr(G.hist).slice(-1)[0]);
+  const cp = cpuPicks(rule, n, cpuTypes, cpuBans, {
+    anc: cpuIdx.map(i=>anc[i]), last: cpuIdx.map(i=>prevRow[i]),
+    prevWin: arr(G.prevWin), past: [].concat(...arr(G.hist).map(arr))
+  });
+  cpuIdx.forEach((ix,k)=>vals[ix]=cp[k]);
+  const r = judge(vals, vals.concat(anc), rule);
   const tot = totals().slice(); while(tot.length<n) tot.push(0);
-  r.pts.forEach((p,k)=>tot[k]+=p);
-  commit(Object.assign({}, G, {phase:'result', vals, lastVals:vals, subs:sub, totals:tot, picked:h-sub.length}));
+  r.pts.forEach((p,k)=>tot[k]=Math.max(0, tot[k]+p));     // 合計はマイナスにならない
+  const hist = arr(G.hist).map(arr); hist.push(vals);
+  const winNums = winnersOf(vals, r);
+  const banned = Array.from(new Set(arr(G.banned).concat(winNums))).sort((a,b)=>a-b);
+  commit(Object.assign({}, G, {phase:'result', vals, all:r.all.slice().sort((a,b)=>a-b), subs:sub, totals:tot, hist, banned, winNums, prevWin:winNums, picked:h-sub.length}));
   setTimeout(()=>{ HOST.closing=false; }, 1500);
 }
 function nextRound(){
   if(G.round+1>=ROUNDS) commit(Object.assign({}, G, {phase:'final'}));
-  else commit(Object.assign({}, G, {phase:'pick', round:G.round+1, vals:null, subs:null, picked:0, endsAt: solo?0:now()+G.limit*1000}));
+  else commit(Object.assign({}, G, {phase:'pick', round:G.round+1, vals:null, all:null, subs:null, winNums:null, picked:0, endsAt: solo?0:now()+G.limit*1000}));
 }
 let abortArmed=0;
 function abortHtml(){
@@ -469,6 +628,7 @@ function bindAbort(){
   };
 }
 function backToLobby(){
+  myAnchor=null; ANCH.gid=null; ANCH.vals=null;
   if(solo){ G=null; screen='solo'; render(); window.scrollTo(0,0); return; }
   roomRef('picks').remove().catch(()=>{});
   commit({phase:'lobby'});
@@ -481,8 +641,10 @@ const logo = small => `<header class="logo">${small?'':'<span class="sub">A GAME
 function rulesWin(){
   return `<section class="win">
     <span class="cap">HOW TO PLAY</span>
-    <p>0〜100の整数を全員で同時に出す。毎ラウンド変わる「代表値」に近い順に得点。1位は人数と同じ点、そこから2点ずつ減り、人数の半分の順位まで点が入る。全${ROUNDS}ラウンドの合計で勝負。足りない席はCPUが埋める。</p>
-    <div class="rules">${RULES.map(r=>`<div><b>${r.short}</b>${r.desc}</div>`).join('')}</div>
+    <p>はじめに全員が「最初の数字」を1つ入れる。この数字はほかの人には秘密のまま、5ラウンドすべてのデータに入る。毎ラウンド0〜100の整数を全員で同時に出し、全データ（最初の数字＋今回の数）から決まる目標に近い順に得点。</p>
+    <p class="note">上位：1位は人数と同じ点、2点ずつ減って人数の半分の順位まで。下位：ビリは −人数点、4点ずつ軽くなって下位約25%まで減点（合計は0点より下がらない）。ビリから2番目にはブービー賞。</p>
+    <p class="note">使えない数：自分の最初の数字、自分が前に使った数、過去のラウンドで1位を取った数（全員）。</p>
+    <div class="rules">${RULES.map(r=>`<div><b>${r.short}</b>${r.desc}</div>`).join('')}<div><b>ボーナス（まれ）</b>${BONUS.desc}被らなければ、その数がそのまま得点。</div></div>
   </section>`;
 }
 function renderHome(){
@@ -523,12 +685,12 @@ function settingsHtml(withLimit){
   return `<div class="row"><label for="nRange">CPUを含めた人数</label><span class="val" id="nOut">${HOST.target}人</span></div>
     <input type="range" id="nRange" min="${MIN_N}" max="${MAX_N}" step="1" value="${HOST.target}">
     <p class="note" id="ptsNote"></p>
-    ${withLimit?`<label for="limitSel">1ラウンドの制限時間（出さなかった人はCPUが代役）</label>
-    <select id="limitSel">${[10,20,30].map(s=>`<option value="${s}" ${s===HOST.limit?'selected':''}>${s}秒</option>`).join('')}</select>`:''}`;
+    ${withLimit?`<label for="limitSel">1回の制限時間（出さなかった人は、使える数からランダム）</label>
+    <select id="limitSel">${[20,30,60].map(s=>`<option value="${s}" ${s===HOST.limit?'selected':''}>${s}秒</option>`).join('')}</select>`:''}`;
 }
 function bindSettings(){
   const nr=document.getElementById('nRange'), no=document.getElementById('nOut'), pn=document.getElementById('ptsNote');
-  const show=()=>{ const lim=scoreLimit(HOST.target); pn.textContent=`1位 ${HOST.target}点、2位 ${HOST.target-2}点 … ${lim}位 ${POINTS(lim,HOST.target)}点（参加者が多ければ人数は自動で増えます）`; };
+  const show=()=>{ const lim=scoreLimit(HOST.target); const pc=penaltyCount(HOST.target); pn.textContent=`1位 +${HOST.target}点 … ${lim}位 +${POINTS(lim,HOST.target)}点 ／ ビリ −${HOST.target}点 … 下から${pc}番目 ${PENALTY(pc,HOST.target)}点（参加者が多ければ人数は自動で増えます）`; };
   show(); nr.oninput=()=>{ HOST.target=+nr.value; no.textContent=HOST.target+'人'; show(); };
   const sel=document.getElementById('limitSel'); if(sel) sel.onchange=()=>{ HOST.limit=+sel.value; };
 }
@@ -586,53 +748,90 @@ function refreshLobby(){
 
 function renderGame(){
   if(!G){ app.innerHTML = `${logo(true)}<section class="win"><p class="status">受信しています…</p></section>`; return; }
-  ({pick:renderPick, result:renderResult, final:renderFinal})[G.phase]();
+  ({anchor:renderPick, pick:renderPick, result:renderResult, final:renderFinal})[G.phase]();
 }
 function topbar(label){
   const i = myIdx();
   const codeChip = solo ? '' : `<span class="chip">ROOM <span class="code-sm">${esc(code)}</span></span>`;
   return `<div class="topbar"><span class="cap num">${label}</span><span style="display:flex;gap:6px;flex-wrap:wrap">${codeChip}${i>=0?`<span class="chip me num">${totals()[i]}点 ・ ${rankOf(i)}位 / ${G.n}人</span>`:`<span class="chip">${isHost?'ホスト':'観戦中'}</span>`}</span></div>`;
 }
+function banHtml(){
+  const i=myIdx(); if(i<0) return '';
+  const used = arr(G.hist).map(row=>arr(row)[i]).filter(v=>typeof v==='number');
+  const wins = arr(G.banned);
+  if(myAnchor==null && !used.length && !wins.length) return '';
+  const chip=(v,c)=>`<span class="nchip ${c}">${v}</span>`;
+  return `<section class="win bans">
+    <span class="cap">使えない数</span>
+    <div class="nchips">${myAnchor!=null?chip(myAnchor,'mine'):''}${used.map(v=>chip(v,'used')).join('')}${wins.map(v=>chip(v,'top1')).join('')}</div>
+    <div class="legend"><span><i class="lg mine"></i>あなたの最初の数字</span><span><i class="lg used"></i>あなたが使った数</span><span><i class="lg top1"></i>過去の1位の数</span></div>
+  </section>`;
+}
 function renderPick(){
-  const rule = ruleOf(arr(G.order)[G.round]), i = myIdx(), done = submittedKey===roundKey();
+  const anchorPhase = G.phase==='anchor';
+  const rule = anchorPhase ? null : ruleOf(arr(G.order)[G.round]), i = myIdx(), done = submittedKey===roundKey();
   const timed = !solo;
+  const ban = anchorPhase ? new Set() : myBanned();
+  if(i>=0 && !done && ban.has(myPick)) myPick = nearestAllowed(myPick, ban);
+  const card = anchorPhase
+    ? `<section class="win rulewin pop">
+        <span class="cap">FIRST NUMBER</span>
+        <h2>好きな数を1つ選ぼう</h2>
+        <p class="dim" style="font-size:.9rem">この数は5ラウンドすべてのデータに入ります（ほかの人には秘密）。データは「最初の数字 ${G.n}個 ＋ 毎ラウンドの数 ${G.n}個」の合計 ${G.n*2}個。選んだ数は、あなたはラウンドで使えなくなります。</p>
+      </section>`
+    : `<section class="win rulewin pop ${rule.mode==='bonus'?'bonus':''}">
+        <span class="cap">${rule.mode==='bonus'?'BONUS ROUND':'TARGET'}</span>
+        <h2>${rule.name}</h2>
+        <p class="dim" style="font-size:.9rem">${rule.desc}${rule.mode==='bonus'?'':`　データは全部で ${G.n*2}個（最初の数字を含む）。`}</p>
+      </section>`;
   app.innerHTML = `<div class="cols"><div class="col">
-  ${topbar(`ROUND ${G.round+1} / ${ROUNDS}`)}
-  <section class="win rulewin pop">
-    <span class="cap">TARGET</span>
-    <h2>${rule.name}</h2>
-    <p class="dim" style="font-size:.9rem">${rule.desc}</p>
-  </section>
+  ${topbar(anchorPhase ? 'FIRST NUMBER' : `ROUND ${G.round+1} / ${ROUNDS}`)}
+  ${card}
+  ${anchorPhase?'':banHtml()}
   ${abortHtml()}</div><div class="col">${i<0 ? `<section class="win">
       ${timed?`<div class="row"><span class="status">${isHost?'挑戦者の提出を待っています':'このゲームは観戦です。次のゲームから参加できます'}</span><span class="timer" id="timer"></span></div>`:''}
       <p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出</p>
     </section>` : `
   <section class="win">
-    <div class="row"><label for="pickRange">あなたの数</label>${timed?`<span class="timer" id="timer"></span>`:''}</div>
+    <div class="row"><label for="pickRange">${anchorPhase?'あなたの最初の数字':'あなたの数'}</label>${timed?`<span class="timer" id="timer"></span>`:''}</div>
     <div class="bignum" id="bigNum" aria-live="polite">${myPick}</div>
     ${done ? `<p class="status" style="text-align:center">提出済み。ほかの人を待っています</p>` : `
     <input type="range" id="pickRange" min="0" max="100" step="1" value="${myPick}">
     <div class="steps">
       <button data-d="-10">−10</button><button data-d="-1">−1</button>
       <button data-d="1">＋1</button><button data-d="10">＋10</button>
-    </div>`}
+    </div>
+    <p class="note" id="banNote"></p>`}
     ${solo?'':`<p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出 ・ ほか${G.n-H()}席はCPU</p>`}
+    ${timed && !done?'<p class="note">時間内に決めないと、使える数の中からランダムに選ばれます。</p>':''}
   </section>
-  ${done?'':`<section class="win menu"><button class="cmd go" id="submitBtn">この数で勝負</button></section>`}`}</div></div>`;
+  ${done?'':`<section class="win menu"><button class="cmd go" id="submitBtn">${anchorPhase?'この数に決める':'この数で勝負'}</button></section>`}`}</div></div>`;
   bindAbort();
   updateTimer();
   if(i<0 || done) return;
-  const rng=document.getElementById('pickRange'), big=document.getElementById('bigNum');
-  const set=v=>{ myPick=clamp(v); rng.value=myPick; big.textContent=myPick; };
-  rng.oninput=()=>set(+rng.value);
-  app.querySelectorAll('.steps button').forEach(b=>b.onclick=()=>set(myPick + +b.dataset.d));
+  const rng=document.getElementById('pickRange'), big=document.getElementById('bigNum'), note=document.getElementById('banNote');
+  // 使えない数はとばして動く
+  const set=(v,dir)=>{
+    v=clamp(v);
+    if(ban.has(v)){
+      let w=v; const step = dir || 1;
+      while(w>=0 && w<=100 && ban.has(w)) w+=step;
+      if(w<0 || w>100){ w=v; while(w>=0 && w<=100 && ban.has(w)) w-=step; }
+      v = (w>=0 && w<=100) ? w : nearestAllowed(v, ban);
+    }
+    myPick=v; rng.value=myPick; big.textContent=myPick; note.textContent='';
+  };
+  rng.oninput=()=>{ const v=+rng.value; set(v, v>=myPick?1:-1); };
+  app.querySelectorAll('.steps button').forEach(b=>b.onclick=()=>{ const d=+b.dataset.d; set(myPick+d, d>0?1:-1); });
   document.getElementById('submitBtn').onclick = ()=>{
+    if(ban.has(myPick)){ note.textContent='その数は使えません'; return; }
     const k = roundKey();
+    if(anchorPhase) myAnchor = myPick;
     if(solo){ submittedKey=k; soloPick=myPick; render(); setTimeout(hostTick, 500); return; }
     if(now() >= G.endsAt){ return; }
     const btn=document.getElementById('submitBtn'); btn.disabled=true;
     roomRef(`picks/${k}/${uid}`).set(myPick)
-      .then(()=>{ submittedKey=k; if(roundKey()===k && G.phase==='pick') render(); })
+      .then(()=>{ submittedKey=k; if(roundKey()===k && (G.phase==='pick'||G.phase==='anchor')) render(); })
       .catch(()=>{ btn.disabled=false; btn.textContent='送信できませんでした。もう一度'; });
   };
 }
@@ -642,15 +841,16 @@ function patchCounts(){
 }
 function updateTimer(){
   const el=document.getElementById('timer');
-  if(!el || !G || G.phase!=='pick') return;
+  if(!el || !G || (G.phase!=='pick' && G.phase!=='anchor')) return;
   const s = Math.max(0, Math.ceil((G.endsAt-now())/1000));
   el.textContent = s>0 ? `残り ${s}秒` : '集計中…';
+  el.classList.toggle('danger', s>0 && s<=10);
   if(s===0){ const b=document.getElementById('submitBtn'); if(b){ b.disabled=true; b.textContent='時間切れ'; } }
 }
 
-function chart(vals, r, rule, mi){
+function chart(all, r, rule, myVal){
   const st=r.st, W=360, L=24, R=344, X=v=>L+(R-L)*v/100;
-  const bins=new Array(20).fill(0); vals.forEach(v=>bins[Math.min(19,Math.floor(v/5))]++);
+  const bins=new Array(20).fill(0); all.forEach(v=>bins[Math.min(19,Math.floor(v/5))]++);
   const maxC=Math.max(...bins), hTop=16, hBase=120, sc=(hBase-hTop-14)/maxC, bw=(R-L)/20;
   const bars=bins.map((c,i)=>c?`<rect x="${L+i*bw+1}" y="${hBase-c*sc}" width="${bw-2}" height="${c*sc}" fill="var(--bar)"/>`:'').join('');
   const yTicks=[0,Math.ceil(maxC/2),maxC].filter((v,i,a)=>a.indexOf(v)===i).map(c=>`<text x="${L-4}" y="${hBase-c*sc+3}" text-anchor="end" font-size="9" fill="var(--dim)" font-family="IBM Plex Mono,monospace">${c}</text>`).join('');
@@ -663,16 +863,18 @@ function chart(vals, r, rule, mi){
     <rect x="${X(st.q1)}" y="${by-10}" width="${Math.max(1,X(st.q3)-X(st.q1))}" height="20" fill="var(--win-b)" stroke="var(--text)"/>
     <line x1="${X(st.median)}" x2="${X(st.median)}" y1="${by-10}" y2="${by+10}" stroke="var(--text)" stroke-width="2"/>
     <text x="${X(st.mean)}" y="${by+4}" text-anchor="middle" font-size="11" fill="var(--text)">+</text>`;
-  const tx=X(r.t);
-  const target=`<rect x="${tx-1.5}" y="${hTop-2}" width="3" height="${by+12-hTop}" fill="var(--gold)"/>
+  let target='';
+  if(r.t!=null){
+    const tx=X(r.t);
+    target=`<rect x="${tx-1.5}" y="${hTop-2}" width="3" height="${by+12-hTop}" fill="var(--gold)"/>
     <text x="${Math.min(Math.max(tx,40),320)}" y="${hTop-5}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--gold)">${rule.mode==='far'?'基準':'目標'} ${f(r.t)}</text>`;
-  let you='';
-  if(mi>=0){
-    const b=Math.min(19,Math.floor(vals[mi]/5)), yx=X(vals[mi]);
-    you=`<rect x="${L+b*bw+1}" y="${hBase-bins[b]*sc}" width="${bw-2}" height="${bins[b]*sc}" fill="var(--you)" opacity=".7"/>
-      <path d="M${yx-5} ${hBase+29} L${yx+5} ${hBase+29} L${yx} ${hBase+22} Z" fill="var(--you)"/>`;
   }
-  return `<svg class="chart" viewBox="0 0 ${W} 174" role="img" aria-label="全員の数のヒストグラムと箱ひげ図">
+  let you='';
+  if(myVal!=null){
+    const b=Math.min(19,Math.floor(myVal/5)), yx=X(myVal);
+    you=`<path d="M${yx-5} ${hBase+29} L${yx+5} ${hBase+29} L${yx} ${hBase+22} Z" fill="var(--you)"/>`;
+  }
+  return `<svg class="chart" viewBox="0 0 ${W} 174" role="img" aria-label="全データのヒストグラムと箱ひげ図">
     <line x1="${L}" x2="${R}" y1="${hBase}" y2="${hBase}" stroke="var(--text)"/>${bars}${you}${yTicks}${xTicks}${box}${target}</svg>`;
 }
 function rowsHtml(order, cells, mi, limit, cols){
@@ -685,36 +887,45 @@ function hostControls(label){
   return isHost ? `<section class="win menu"><button class="cmd go" id="nextBtn">${label}</button></section>`
                 : `<section class="win"><p class="status">ホストの進行を待っています…</p></section>`;
 }
+const sgn = p => p>0 ? `+${p}` : `${p}`;
 function renderResult(){
-  const vals = arr(G.vals);
-  if(vals.length!==G.n){ app.innerHTML = `${topbar('集計中')}<section class="win"><p class="status">集計中…</p></section>`; return; }
-  const rule=ruleOf(arr(G.order)[G.round]), r=judge(vals, rule), st=r.st, mi=myIdx(), lim=scoreLimit(G.n);
-  const head = mi<0 ? 'ラウンド結果' : r.pts[mi] ? `${r.rank[mi]}位！ +${r.pts[mi]}点` : `${r.rank[mi]}位（得点は${lim}位まで）`;
+  const vals = arr(G.vals), all = arr(G.all);
+  if(vals.length!==G.n || all.length!==G.n*2){ app.innerHTML = `${topbar('集計中')}<section class="win"><p class="status">集計中…</p></section>`; return; }
+  const rule=ruleOf(arr(G.order)[G.round]), r=judge(vals, all, rule), st=r.st, mi=myIdx(), lim=scoreLimit(G.n), bonus=!!r.bonus;
+  const head = mi<0 ? 'ラウンド結果'
+    : bonus ? (r.pts[mi]>0 ? `被らなかった！ +${r.pts[mi]}点` : `${vals[mi]} は被った… 0点`)
+    : r.pts[mi]>0 ? `${r.rank[mi]}位！ +${r.pts[mi]}点` : r.pts[mi]<0 ? `${r.rank[mi]}位 … ${r.pts[mi]}点` : `${r.rank[mi]}位（±0点）`;
   const order = vals.map((v,i)=>i).sort((a,b)=>r.rank[a]-r.rank[b] || a-b);
-  const cell = i=>`<tr class="${i===mi?'me':''}"><td class="num">${r.rank[i]}位</td><td>${esc(seatName(i))}${seatTag(i)?`<span class="tag">${seatTag(i)}</span>`:''}</td><td class="num">${vals[i]}</td><td class="num">${f(r.d[i])}</td><td class="num ${r.pts[i]?'pt':''}">+${r.pts[i]}</td></tr>`;
-  const last = G.round+1>=ROUNDS, sb = subs();
+  const tagOf = i => seatTag(i)?`<span class="tag">${seatTag(i)}</span>`:'';
+  const cell = i=>`<tr class="${i===mi?'me':''}"><td class="num">${r.rank[i]}位</td><td>${esc(seatName(i))}${tagOf(i)}</td><td class="num">${vals[i]}</td><td class="num">${bonus ? (st.cnt[vals[i]]>1?`${st.cnt[vals[i]]}個`:'なし') : f(r.d[i])}</td><td class="num ${r.pts[i]>0?'pt':r.pts[i]<0?'neg':''}">${sgn(r.pts[i])}</td></tr>`;
+  // ビリ側も見せる
+  const worst = order.slice(-3).filter(i=>!order.slice(0,10).includes(i));
+  let rows = rowsHtml(order, cell, mi, 10, 5);
+  if(!bonus && worst.length){ rows += `<tr class="gap"><td colspan="5">⋮</td></tr>` + worst.filter(i=>i!==mi).map(cell).join(''); }
+  const last = G.round+1>=ROUNDS, sb = subs(), wins = arr(G.winNums);
   app.innerHTML = `<div class="cols"><div class="col">
   ${topbar(`ROUND ${G.round+1} / ${ROUNDS}`)}
   <section class="win pop">
     <span class="cap">${rule.name}</span>
     <h2>${head}</h2>
-    ${chart(vals, r, rule, mi)}
-    <div class="legend"><span><i style="background:var(--bar)"></i>度数（階級幅5）</span>${mi>=0?'<span><i style="background:var(--you)"></i>あなた</span>':''}<span><i style="background:var(--gold)"></i>${rule.mode==='far'?'基準':'目標'}</span><span>箱ひげ図の＋は平均値</span></div>
+    ${chart(all, r, rule, mi>=0?vals[mi]:null)}
+    <div class="legend"><span><i style="background:var(--bar)"></i>全データ ${all.length}個の度数（階級幅5）</span>${mi>=0?'<span><i style="background:var(--you)"></i>あなたの数</span>':''}${r.t!=null?`<span><i style="background:var(--gold)"></i>${rule.mode==='far'?'基準':'目標'}</span>`:''}<span>箱ひげ図の＋は平均値</span></div>
   </section>
   <section class="win">
-    <span class="cap">CALCULATION ・ ${st.n}人</span>
+    <span class="cap">CALCULATION ・ データ ${st.n}個（最初の数字 ${G.n} ＋ 今回 ${G.n}）</span>
     <div class="calc">
       <div><span class="k">平均値：</span>${st.sum} ÷ ${st.n} = ${f(st.mean)}</div>
       <div><span class="k">中央値：</span>${medianText(st)}</div>
-      <div><span class="k">四分位数：</span>Q1 = ${f(st.q1)}, Q3 = ${f(st.q3)}（各${st.half}個の中央値）</div>
-      <div><span class="k">最小・最大：</span>${st.min}, ${st.max}</div>
-      <div class="hl">${rule.tf(st)}</div>
+      <div><span class="k">第1四分位数：</span>Q1 = ${f(st.q1)}（下位${st.half}個の中央値）</div>
+      <div><span class="k">最頻値：</span>${modeText(st)}</div>
+      <div class="hl">${bonus ? `だれとも被らなかった数：${vals.filter(v=>st.cnt[v]===1).sort((a,b)=>b-a).join(', ')||'なし'}` : rule.tf(st)}</div>
     </div>
   </section></div><div class="col"><section class="win grow">
-    <span class="cap">RANKING ・ ${lim}位まで得点</span>
-    <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>数</th><th>距離</th><th>得点</th></tr></thead>
-    <tbody>${rowsHtml(order, cell, mi, 10, 5)}</tbody></table></div>
-    ${sb.length?`<p class="note">時間内に出さなかった${sb.length}人の席はCPUが代役で出しました。</p>`:''}
+    <span class="cap">${bonus ? 'BONUS ・ 被らなければ数がそのまま得点' : `RANKING ・ ${lim}位まで加点 ／ 下位${penaltyCount(G.n)}人は減点`}</span>
+    <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>数</th><th>${bonus?'被り':'距離'}</th><th>得点</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    ${wins.length?`<p class="note">1位の数 <b>${wins.join(', ')}</b> は、次のラウンドから全員使えません。</p>`:''}
+    ${sb.length?`<p class="note">時間内に出さなかった${sb.length}人は、ランダムな数になりました。</p>`:''}
   </section>
   ${hostControls(last?'最終結果へ':'次のラウンドへ')}
   ${last?'':abortHtml()}</div></div>`;
@@ -724,13 +935,22 @@ function renderResult(){
 function renderFinal(){
   const mi=myIdx(), tot=totals();
   const order=tot.map((t,i)=>i).sort((a,b)=>tot[b]-tot[a] || a-b);
-  const cell=i=>`<tr class="${i===mi?'me':''}"><td class="num">${rankOf(i)}位</td><td>${esc(seatName(i))}${i>=H()?`<span class="tag">${seatTag(i)}</span>`:''}</td><td class="num">${tot[i]}点</td></tr>`;
+  // ブービー賞：ビリ（最低点）の次に低い点の人
+  const lows=Array.from(new Set(tot)).sort((a,b)=>a-b);
+  const boobyScore = lows.length>=2 ? lows[1] : null;
+  const booby = boobyScore==null ? [] : tot.map((t,i)=>i).filter(i=>tot[i]===boobyScore);
+  const cell=i=>`<tr class="${i===mi?'me':''}"><td class="num">${rankOf(i)}位</td><td>${esc(seatName(i))}${i>=H()?`<span class="tag">${seatTag(i)}</span>`:''}${booby.includes(i)?'<span class="booby">ブービー賞</span>':''}</td><td class="num">${tot[i]}点</td></tr>`;
   const humans = seats().map((s,i)=>i).sort((a,b)=>tot[b]-tot[a] || a-b);
   app.innerHTML = `<div class="cols"><div class="col">
   <header class="logo"><span class="sub">FINAL RESULT</span>
     <p class="big-title">${mi<0?'ゲーム終了':rankOf(mi)===1?'VICTORY':`${rankOf(mi)}位`}</p>
     <div class="rule"></div>
     ${mi>=0?`<span class="ja">${tot[mi]}点 / 最大 ${G.n*ROUNDS}点 ・ ${G.n}人中</span>`:''}</header>
+  ${booby.length?`<section class="win boobywin">
+    <span class="cap">BOOBY PRIZE ・ ブービー賞（ビリから2番目）</span>
+    <p class="booby-names">${booby.map(i=>`${esc(seatName(i))}${i===mi?'（あなた）':''}`).join('、')}</p>
+    <p class="note">${boobyScore}点 ・ ${rankOf(booby[0])}位 / ${G.n}人</p>
+  </section>`:''}
   <section class="win">
     <span class="cap">STANDINGS ・ CPU込み</span>
     <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>合計</th></tr></thead>
