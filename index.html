@@ -3,31 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>CROWD READER</title>
+<title>READ × CROWD</title>
 <meta name="description" content="0〜100の数を全員で同時に出し、代表値に近い順に得点する読み合いゲーム">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Shippori+Mincho:wght@500;600;700;800&display=swap">
 <style>
 body{margin:0}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
-/* Layout: 夜空の上にRPGのコマンドウィンドウを縦に重ねる1カラム。単一の夜テーマで統一。 */
+/* Layout: 象牙色の紙に、金の細い罫と墨の文字。ロゴ「READ × CROWD」に合わせた古典的なローマン体と明朝体 */
 :root{
-  color-scheme:dark;
-  --sky-top:#18235e; --sky:#080c26;
-  --win-a:#2846a6; --win-b:#0c1a52; --edge:#e3e8ff; --line:rgba(227,232,255,.22);
-  --text:#f3f5ff; --dim:#aeb8e4; --gold:#ecc96d; --you:#7fe3ff; --good:#92f0ad; --bar:#6075c6;
-  --f-title:"Cinzel","Trajan Pro","Times New Roman",serif;
-  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
-  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+  --sky-top:#fdfaf2; --sky:#efe5cf;
+  --win-a:#fffdf8; --win-b:#f5ecda; --edge:#b48a3c; --line:rgba(80,58,20,.18);
+  --text:#1e1a14; --dim:#6c6150; --gold:#9a7226; --you:#1b6784; --good:#2c7746; --bar:#c9b085; --bad:#b3261e;
+  --f-title:"Cinzel","Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-body:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-num:"Cinzel","Shippori Mincho",serif;
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{min-height:100%}
 body{
-  background:radial-gradient(ellipse 120% 70% at 50% 0%,var(--sky-top),var(--sky) 70%) fixed;
+  background:radial-gradient(ellipse 120% 70% at 50% 0%,var(--sky-top),var(--sky) 75%) fixed;
   background-color:var(--sky);
-  color:var(--text); font-family:var(--f-body); font-size:15px; line-height:1.65;
+  color:var(--text); font-family:var(--f-body); font-weight:500; font-size:15px; line-height:1.7;
   padding-inline:16px; padding-block:24px 48px;
 }
 .wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
@@ -36,28 +36,28 @@ p{margin:0}
 .num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
 
 /* タイトル */
-.logo{display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:18px 8px}
+.logo{display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:10px 4px}
+.logo img{display:block;width:min(92vw,470px);height:auto;filter:drop-shadow(0 4px 10px rgba(120,90,30,.18))}
+.logo.sm img{width:min(70vw,300px)}
 .logo h1{
-  font-family:var(--f-title);font-weight:900;margin:0;text-align:center;line-height:1.05;
-  font-size:clamp(2.3rem,11.5vw,3.6rem);letter-spacing:.09em;
-  color:var(--text);
-  background:linear-gradient(180deg,#ffffff 0%,#dfe4fb 44%,#8e9bd0 52%,#eef1ff 100%);
+  font-family:var(--f-title);font-weight:900;margin:0;text-align:center;line-height:1.1;
+  font-size:clamp(2.1rem,10vw,3.2rem);letter-spacing:.08em;color:var(--text);
+  background:linear-gradient(180deg,#5a4214 0%,#1e1a14 48%,#2b2318 70%,#8a6a2a 100%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 2px 0 rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(127,170,255,.35));
 }
 .logo .rule{width:min(260px,70%);height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
 .logo .sub{font-family:var(--f-title);font-weight:600;color:var(--gold);letter-spacing:.35em;font-size:.78rem}
-.logo .ja{color:var(--dim);font-size:.85rem;letter-spacing:.2em}
+.logo .ja{color:var(--gold);font-weight:700;font-size:.9rem;letter-spacing:.3em}
 
 /* コマンドウィンドウ */
 .win{
   background:linear-gradient(180deg,var(--win-a),var(--win-b));
-  border:2px solid var(--edge);border-radius:8px;
-  box-shadow:inset 0 0 0 2px rgba(0,0,0,.35),0 4px 0 rgba(0,0,0,.4);
+  border:1px solid var(--edge);border-radius:6px;
+  box-shadow:inset 0 0 0 3px var(--win-a),inset 0 0 0 4px rgba(180,138,60,.35),0 6px 18px rgba(110,80,25,.12);
   padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;
 }
 .cap{font-family:var(--f-title);font-weight:800;font-size:.8rem;letter-spacing:.18em;color:var(--gold)}
-h2{font-family:var(--f-body);font-weight:700;font-size:1.3rem;margin:0;text-wrap:balance}
+h2{font-family:var(--f-title);font-weight:800;font-size:1.3rem;margin:0;text-wrap:balance}
 .big-title{font-family:var(--f-title);font-weight:900;font-size:2.1rem;letter-spacing:.06em;margin:0;line-height:1.2}
 
 .menu{display:flex;flex-direction:column;gap:2px}
@@ -67,7 +67,7 @@ h2{font-family:var(--f-body);font-weight:700;font-size:1.3rem;margin:0;text-wrap
 }
 .cmd::before{content:"▶";position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:.8rem;color:var(--gold);opacity:0}
 .cmd:hover::before,.cmd:focus-visible::before{opacity:1}
-.cmd:hover{background:rgba(255,255,255,.06)}
+.cmd:hover{background:rgba(154,114,38,.08)}
 .cmd:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
 .cmd:disabled{color:var(--dim);cursor:default;opacity:.6}
 .cmd:disabled::before{opacity:0}
@@ -75,7 +75,7 @@ h2{font-family:var(--f-body);font-weight:700;font-size:1.3rem;margin:0;text-wrap
 .cmd.go{color:var(--gold)}
 
 input[type=text],select{
-  font:inherit;color:var(--text);background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:6px;
+  font:inherit;color:var(--text);background:rgba(255,255,255,.75);border:1px solid var(--line);border-radius:6px;
   padding:10px 12px;min-height:44px;width:100%;
 }
 input[type=text]:focus-visible,select:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
@@ -93,14 +93,14 @@ label{font-size:.85rem;color:var(--dim)}
 .players li.me{border-color:var(--you);color:var(--you)}
 
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
-.chip{font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:2px 12px;background:rgba(0,0,0,.25)}
+.chip{font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:2px 12px;background:rgba(255,255,255,.6)}
 .chip.me{border-color:var(--you);color:var(--you);font-weight:700}
 .rulewin{border-color:var(--gold)}
 .rulewin h2{font-size:1.4rem}
 
-.bignum{font-family:var(--f-num);font-size:4.2rem;line-height:1;text-align:center;font-weight:600;color:var(--you);text-shadow:0 0 18px rgba(127,227,255,.35)}
+.bignum{font-family:var(--f-num);font-size:4.2rem;line-height:1;text-align:center;font-weight:700;color:var(--you)}
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.steps button{font-family:var(--f-num);font-weight:600;font-size:1rem;color:var(--text);background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:6px;min-height:44px;cursor:pointer}
+.steps button{font-family:var(--f-num);font-weight:700;font-size:1rem;color:var(--text);background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:6px;min-height:44px;cursor:pointer}
 .steps button:focus-visible{outline:2px solid var(--gold)}
 .timer{font-family:var(--f-num);font-weight:600;color:var(--gold)}
 .status{font-size:.9rem;color:var(--dim)}
@@ -131,10 +131,10 @@ td .tag{font-size:.72rem;color:var(--dim);margin-left:4px}
 .code-sm{font-family:var(--f-num);font-weight:600;color:var(--gold);letter-spacing:.12em}
 .join-row{display:flex;gap:8px}
 .join-row input{flex:1;min-width:0;font-family:var(--f-num);font-size:1.3rem;letter-spacing:.3em;text-align:center}
-.btn{font:inherit;font-weight:700;color:var(--sky);background:var(--gold);border:none;border-radius:6px;padding:0 18px;min-height:44px;cursor:pointer;flex:none}
+.btn{font:inherit;font-weight:700;color:#fffaf0;background:linear-gradient(180deg,#c39a4a,var(--gold) 55%,#7c5a1c);border:none;border-radius:6px;padding:0 18px;min-height:44px;cursor:pointer;flex:none}
 .btn:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 .btn:disabled{opacity:.5;cursor:default}
-.err{color:#ffb4a8;font-size:.88rem;min-height:1.2em}
+.err{color:var(--bad);font-size:.88rem;min-height:1.2em}
 .check{display:flex;gap:10px;align-items:center;font-size:.95rem;color:var(--text);cursor:pointer;min-height:44px}
 .check input{width:20px;height:20px;accent-color:var(--gold)}
 .offline{font-size:.8rem;color:var(--dim);text-align:center}
@@ -147,23 +147,33 @@ td .tag{font-size:.72rem;color:var(--dim);margin-left:4px}
 .nchip.top1{border-color:var(--gold);color:var(--gold)}
 .legend i.lg{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:2px solid var(--line)}
 .legend i.lg.mine{border-color:var(--you)} .legend i.lg.top1{border-color:var(--gold)}
-td.neg{color:#ff8f7d;font-weight:700}
-.rulewin.bonus{border-color:var(--you);box-shadow:0 0 18px rgba(127,227,255,.25)}
-.timer.danger{color:#ff7a68}
+td.neg{color:var(--bad);font-weight:700}
+.rulewin.bonus{border-color:var(--you);box-shadow:inset 0 0 0 3px var(--win-a),inset 0 0 0 4px rgba(27,103,132,.35),0 0 18px rgba(27,103,132,.18)}
+.timer.danger{color:var(--bad)}
 @media (prefers-reduced-motion: no-preference){ .timer.danger{animation:tblink .5s steps(2,start) infinite} @keyframes tblink{50%{opacity:.35}} }
 /* ---- これまでのラウンド ---- */
 .past .pastitem{display:flex;flex-direction:column;gap:2px;padding-top:6px;border-top:1px solid var(--line)}
 .past .pastitem:first-of-type{border-top:none;padding-top:0}
 .past .chart{width:auto;max-width:100%;max-height:150px;margin:0 auto}
 /* ---- ブービー賞 ---- */
-.booby{display:inline-block;font-size:.72rem;font-weight:700;color:#1a1030;background:#c9a2ff;border-radius:4px;padding:0 6px;margin-left:6px}
-.boobywin{border-color:#c9a2ff}
-.boobywin .cap{color:#c9a2ff}
+.booby{display:inline-block;font-size:.72rem;font-weight:700;color:#fff;background:#7a4fb0;border-radius:4px;padding:0 6px;margin-left:6px}
+.boobywin{border-color:#7a4fb0}
+.boobywin .cap{color:#7a4fb0}
 .booby-names{font-family:var(--f-title);font-weight:800;font-size:1.3rem;margin:0}
 /* ---- 途中でやめる ---- */
 .cmd.abort{font-size:.92rem;color:var(--dim);border:1px dashed var(--line);border-radius:6px;padding-left:12px;text-align:center}
 .cmd.abort::before{display:none}
-.cmd.abort.armed{color:#ffb4a8;border-color:#ffb4a8}
+.cmd.abort.armed{color:var(--bad);border-color:var(--bad)}
+/* ---- 題字つきの画面 ---- */
+.page{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (min-width:760px) and (min-height:560px){
+  body:has(.page) .wrap{max-width:1240px;height:100%}
+  .page{height:100%;min-height:0}
+  .page > .logo{flex:0 0 auto;padding-block:0}
+  .page > .logo img{width:auto;height:min(25vh,230px)}
+  .page > .logo.sm img{height:min(17vh,150px)}
+  .page > .cols{height:auto;flex:1 1 auto;min-height:0}
+}
 /* ---- 画面の組み方：スマホは縦1列、タブレット以上は左右2列でページをスクロールさせない ---- */
 .cols,.col{display:flex;flex-direction:column;gap:14px;min-width:0}
 @media (min-width:760px) and (min-height:560px){
@@ -176,7 +186,7 @@ td.neg{color:#ff8f7d;font-weight:700}
   .col > .win.grow{flex:0 1 auto;min-height:120px;overflow:hidden}
   .col > .win.grow .tbl{overflow-y:auto;min-height:0}
   .logo{padding-block:6px 0}
-  .logo h1{font-size:clamp(2.2rem,5vw,3.2rem)}
+  .logo h1{font-size:clamp(2.1rem,4.6vw,3rem)}
   .rulewin h2{font-size:1.6rem}
   .bignum{font-size:5rem}
 }
@@ -640,8 +650,7 @@ function backToLobby(){
 
 /* ================= 画面 ================= */
 function render(){ ({home:renderHome, solo:renderSolo, lobby:renderLobby, game:renderGame})[screen](); }
-const logo = small => `<header class="logo">${small?'':'<span class="sub">A GAME OF STATISTICS</span>'}
-  <h1>CROWD READER</h1><div class="rule"></div><span class="ja">群衆の数を読め</span></header>`;
+const logo = small => `<header class="logo${small?' sm':''}"><h1 style="margin:0"><img src="title.png" alt="READ × CROWD"></h1><span class="ja">群衆の数を読め</span></header>`;
 function rulesWin(){
   return `<section class="win">
     <span class="cap">HOW TO PLAY</span>
@@ -654,7 +663,7 @@ function rulesWin(){
 function renderHome(){
   const ok = !!(db && uid);
   const last = ls.get('crowd-reader-room');
-  app.innerHTML = `<div class="cols"><div class="col">${logo(false)}
+  app.innerHTML = `<div class="page">${logo(false)}<div class="cols"><div class="col">
   <section class="win">
     <label for="nickInput">プレイヤー名（8文字まで）</label>
     <input type="text" id="nickInput" maxlength="8" value="${esc(nick)}" placeholder="なまえ" autocomplete="nickname">
@@ -672,7 +681,7 @@ function renderHome(){
     <button class="cmd go" id="createBtn" ${ok?'':'disabled'}>部屋を作る<small>ホストとして新しい部屋コードを発行する</small></button>
     <button class="cmd" id="soloBtn">ひとりで練習<small>自分以外は全員CPU</small></button>
   </section>
-  ${ok?'':`<p class="offline">${esc(fbError || 'サーバーに接続しています…')}</p>`}</div><div class="col">${rulesWin()}</div></div>`;
+  ${ok?'':`<p class="offline">${esc(fbError || 'サーバーに接続しています…')}</p>`}</div><div class="col">${rulesWin()}</div></div></div>`;
   const ni = document.getElementById('nickInput');
   ni.oninput = ()=>{ nick = ni.value.trim().slice(0,8); ls.set('crowd-reader-nick', nick); };
   const needName = ()=>{ if(nick) return false; ni.focus(); document.getElementById('homeErr').textContent='先にプレイヤー名を入れてください'; return true; };
@@ -699,11 +708,11 @@ function bindSettings(){
   const sel=document.getElementById('limitSel'); if(sel) sel.onchange=()=>{ HOST.limit=+sel.value; };
 }
 function renderSolo(){
-  app.innerHTML = `<div class="cols"><div class="col">${logo(true)}</div><div class="col"><section class="win"><span class="cap">PRACTICE</span>${settingsHtml(false)}</section>
+  app.innerHTML = `<div class="page">${logo(true)}<div class="cols"><div class="col"><section class="win"><span class="cap">PRACTICE</span>${settingsHtml(false)}</section></div><div class="col">
   <section class="win menu">
     <button class="cmd go" id="startBtn">ゲーム開始</button>
     <button class="cmd" id="backBtn">もどる</button>
-  </section></div></div>`;
+  </section></div></div></div>`;
   bindSettings();
   document.getElementById('startBtn').onclick = startGame;
   document.getElementById('backBtn').onclick = ()=>{ solo=false; isHost=false; screen='home'; render(); };
@@ -717,7 +726,7 @@ function lobbyListHtml(){
   return l.length ? l.map(([k,p])=>`<li class="${k===uid?'me':''}">${esc(p.name.slice(0,8))}${k===uid?'（あなた）':''}</li>`).join('') : '<li>まだ誰もいません</li>';
 }
 function renderLobby(){
-  app.innerHTML = `<div class="cols"><div class="col">${logo(true)}
+  app.innerHTML = `<div class="page">${logo(true)}<div class="cols"><div class="col">
   <section class="win">
     <span class="cap">ROOM CODE</span>
     <p class="code">${esc(code)}</p>
@@ -736,7 +745,7 @@ function renderLobby(){
       <button class="cmd go" id="startBtn">このメンバーで開始</button>
       <button class="cmd" id="backBtn">部屋を出る</button>
     </section>`
-  : `<section class="win menu"><button class="cmd" id="backBtn">部屋を出る</button></section>`}</div></div>`;
+  : `<section class="win menu"><button class="cmd" id="backBtn">部屋を出る</button></section>`}</div></div></div>`;
   if(isHost){
     bindSettings();
     const pc=document.getElementById('playChk');
