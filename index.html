@@ -139,6 +139,26 @@ td .tag{font-size:.72rem;color:var(--dim);margin-left:4px}
 .check input{width:20px;height:20px;accent-color:var(--gold)}
 .offline{font-size:.8rem;color:var(--dim);text-align:center}
 
+/* ---- 途中でやめる ---- */
+.cmd.abort{font-size:.92rem;color:var(--dim);border:1px dashed var(--line);border-radius:6px;padding-left:12px;text-align:center}
+.cmd.abort::before{display:none}
+.cmd.abort.armed{color:#ffb4a8;border-color:#ffb4a8}
+/* ---- 画面の組み方：スマホは縦1列、タブレット以上は左右2列でページをスクロールさせない ---- */
+.cols,.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (min-width:760px) and (min-height:560px){
+  html,body{height:100%}
+  body:has(.cols){overflow:hidden;padding-block:14px}
+  body:has(.cols) .wrap{max-width:1240px;height:100%}
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;height:100%;min-height:0;align-items:start}
+  .col{overflow-y:auto;max-height:100%;min-height:0;padding-right:4px;scrollbar-width:thin}
+  .col > *{flex-shrink:0}
+  .col > .win.grow{flex:0 1 auto;min-height:120px;overflow:hidden}
+  .col > .win.grow .tbl{overflow-y:auto;min-height:0}
+  .logo{padding-block:6px 0}
+  .logo h1{font-size:clamp(2.2rem,5vw,3.2rem)}
+  .rulewin h2{font-size:1.6rem}
+  .bignum{font-size:5rem}
+}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -162,7 +182,7 @@ const ROOT = 'games/crowd/rooms';
 const ROOM_TTL = 6*60*60*1000;   // 6時間たった部屋コードは再利用できる
 
 /* ================= ルール・統計 ================= */
-const ROUNDS = 6, MIN_N = 20, MAX_N = 50;
+const ROUNDS = 5, MIN_N = 20, MAX_N = 50;
 const POINTS = (r,n) => Math.max(0, n-2*(r-1));
 const scoreLimit = n => Math.ceil(n/2);
 function medianSorted(a){ const n=a.length, h=Math.floor(n/2); return n%2 ? a[h] : (a[h-1]+a[h])/2; }
@@ -382,7 +402,7 @@ function startGame(){
   const n = Math.max(HOST.target, list.length);
   HOST.closing = false;
   if(!solo) roomRef('picks').remove().catch(()=>{});
-  commit({gid:Date.now(), phase:'pick', n, limit: solo?0:HOST.limit, round:0, order:shuffle(RULES.map(r=>r.id)),
+  commit({gid:Date.now(), phase:'pick', n, limit: solo?0:HOST.limit, round:0, order:shuffle(RULES.map(r=>r.id)).slice(0,ROUNDS),
     seats:list, cpu:Array.from({length:n-list.length}, pickType).join(''), totals:new Array(n).fill(0),
     picked:0, endsAt: solo?0:now()+HOST.limit*1000});
 }
@@ -434,6 +454,20 @@ function nextRound(){
   if(G.round+1>=ROUNDS) commit(Object.assign({}, G, {phase:'final'}));
   else commit(Object.assign({}, G, {phase:'pick', round:G.round+1, vals:null, subs:null, picked:0, endsAt: solo?0:now()+G.limit*1000}));
 }
+let abortArmed=0;
+function abortHtml(){
+  if(!isHost) return '';
+  const armed = Date.now()-abortArmed < 4000;
+  return `<button class="cmd abort${armed?' armed':''}" id="abortBtn">${armed?'もう一度押すと終了します':(solo?'途中でやめる':'途中でやめてロビーにもどる')}</button>`;
+}
+function bindAbort(){
+  const b=document.getElementById('abortBtn'); if(!b) return;
+  b.onclick=()=>{
+    if(Date.now()-abortArmed < 4000){ abortArmed=0; HOST.closing=false; backToLobby(); return; }
+    abortArmed=Date.now(); render();
+    setTimeout(()=>{ if(Date.now()-abortArmed>=4000 && document.getElementById('abortBtn')) render(); }, 4100);
+  };
+}
 function backToLobby(){
   if(solo){ G=null; screen='solo'; render(); window.scrollTo(0,0); return; }
   roomRef('picks').remove().catch(()=>{});
@@ -454,14 +488,14 @@ function rulesWin(){
 function renderHome(){
   const ok = !!(db && uid);
   const last = ls.get('crowd-reader-room');
-  app.innerHTML = `${logo(false)}
+  app.innerHTML = `<div class="cols"><div class="col">${logo(false)}
   <section class="win">
     <label for="nickInput">プレイヤー名（8文字まで）</label>
     <input type="text" id="nickInput" maxlength="8" value="${esc(nick)}" placeholder="なまえ" autocomplete="nickname">
   </section>
   <section class="win">
     <span class="cap">JOIN</span>
-    <label for="codeInput">先生に言われた部屋コード（4桁）</label>
+    <label for="codeInput">ホストに言われた部屋コード（4桁）</label>
     <div class="join-row">
       <input type="text" id="codeInput" inputmode="numeric" maxlength="4" pattern="[0-9]*" value="${esc(last)}" placeholder="0000" autocomplete="off">
       <button class="btn" id="joinBtn" ${ok?'':'disabled'}>参加</button>
@@ -472,8 +506,7 @@ function renderHome(){
     <button class="cmd go" id="createBtn" ${ok?'':'disabled'}>部屋を作る<small>ホストとして新しい部屋コードを発行する</small></button>
     <button class="cmd" id="soloBtn">ひとりで練習<small>自分以外は全員CPU</small></button>
   </section>
-  ${ok?'':`<p class="offline">${esc(fbError || 'サーバーに接続しています…')}</p>`}
-  ${rulesWin()}`;
+  ${ok?'':`<p class="offline">${esc(fbError || 'サーバーに接続しています…')}</p>`}</div><div class="col">${rulesWin()}</div></div>`;
   const ni = document.getElementById('nickInput');
   ni.oninput = ()=>{ nick = ni.value.trim().slice(0,8); ls.set('crowd-reader-nick', nick); };
   const needName = ()=>{ if(nick) return false; ni.focus(); document.getElementById('homeErr').textContent='先にプレイヤー名を入れてください'; return true; };
@@ -500,12 +533,11 @@ function bindSettings(){
   const sel=document.getElementById('limitSel'); if(sel) sel.onchange=()=>{ HOST.limit=+sel.value; };
 }
 function renderSolo(){
-  app.innerHTML = `${logo(true)}
-  <section class="win"><span class="cap">PRACTICE</span>${settingsHtml(false)}</section>
+  app.innerHTML = `<div class="cols"><div class="col">${logo(true)}</div><div class="col"><section class="win"><span class="cap">PRACTICE</span>${settingsHtml(false)}</section>
   <section class="win menu">
     <button class="cmd go" id="startBtn">ゲーム開始</button>
     <button class="cmd" id="backBtn">もどる</button>
-  </section>`;
+  </section></div></div>`;
   bindSettings();
   document.getElementById('startBtn').onclick = startGame;
   document.getElementById('backBtn').onclick = ()=>{ solo=false; isHost=false; screen='home'; render(); };
@@ -519,17 +551,17 @@ function lobbyListHtml(){
   return l.length ? l.map(([k,p])=>`<li class="${k===uid?'me':''}">${esc(p.name.slice(0,8))}${k===uid?'（あなた）':''}</li>`).join('') : '<li>まだ誰もいません</li>';
 }
 function renderLobby(){
-  app.innerHTML = `${logo(true)}
+  app.innerHTML = `<div class="cols"><div class="col">${logo(true)}
   <section class="win">
     <span class="cap">ROOM CODE</span>
     <p class="code">${esc(code)}</p>
-    <p class="note" style="text-align:center">${isHost?'生徒はこのページを開いて、このコードで参加します':'ホストが開始するのを待っています…'}</p>
+    <p class="note" style="text-align:center">${isHost?'挑戦者はこのページを開いて、このコードで参加します':'ホストが開始するのを待っています…'}</p>
   </section>
   <section class="win">
     <div class="row"><span class="cap">PLAYERS</span><span class="num dim" id="lobbyCount">${lobbyList().length}人</span></div>
     <ul class="players" id="lobbyList">${lobbyListHtml()}</ul>
   </section>
-  ${isHost ? `<section class="win">
+  </div><div class="col">${isHost ? `<section class="win">
       <span class="cap">HOST</span>
       <label class="check"><input type="checkbox" id="playChk" ${hostPlays?'checked':''}> ホストも参加者として遊ぶ</label>
       ${settingsHtml(true)}
@@ -538,7 +570,7 @@ function renderLobby(){
       <button class="cmd go" id="startBtn">このメンバーで開始</button>
       <button class="cmd" id="backBtn">部屋を出る</button>
     </section>`
-  : `<section class="win menu"><button class="cmd" id="backBtn">部屋を出る</button></section>`}`;
+  : `<section class="win menu"><button class="cmd" id="backBtn">部屋を出る</button></section>`}</div></div>`;
   if(isHost){
     bindSettings();
     const pc=document.getElementById('playChk');
@@ -564,15 +596,15 @@ function topbar(label){
 function renderPick(){
   const rule = ruleOf(arr(G.order)[G.round]), i = myIdx(), done = submittedKey===roundKey();
   const timed = !solo;
-  app.innerHTML = `
+  app.innerHTML = `<div class="cols"><div class="col">
   ${topbar(`ROUND ${G.round+1} / ${ROUNDS}`)}
   <section class="win rulewin pop">
     <span class="cap">TARGET</span>
     <h2>${rule.name}</h2>
     <p class="dim" style="font-size:.9rem">${rule.desc}</p>
   </section>
-  ${i<0 ? `<section class="win">
-      ${timed?`<div class="row"><span class="status">${isHost?'生徒の提出を待っています':'このゲームは観戦です。次のゲームから参加できます'}</span><span class="timer" id="timer"></span></div>`:''}
+  ${abortHtml()}</div><div class="col">${i<0 ? `<section class="win">
+      ${timed?`<div class="row"><span class="status">${isHost?'挑戦者の提出を待っています':'このゲームは観戦です。次のゲームから参加できます'}</span><span class="timer" id="timer"></span></div>`:''}
       <p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出</p>
     </section>` : `
   <section class="win">
@@ -586,7 +618,8 @@ function renderPick(){
     </div>`}
     ${solo?'':`<p class="status" id="pickedTxt">${G.picked||0} / ${H()}人が提出 ・ ほか${G.n-H()}席はCPU</p>`}
   </section>
-  ${done?'':`<section class="win menu"><button class="cmd go" id="submitBtn">この数で勝負</button></section>`}`}`;
+  ${done?'':`<section class="win menu"><button class="cmd go" id="submitBtn">この数で勝負</button></section>`}`}</div></div>`;
+  bindAbort();
   updateTimer();
   if(i<0 || done) return;
   const rng=document.getElementById('pickRange'), big=document.getElementById('bigNum');
@@ -660,7 +693,7 @@ function renderResult(){
   const order = vals.map((v,i)=>i).sort((a,b)=>r.rank[a]-r.rank[b] || a-b);
   const cell = i=>`<tr class="${i===mi?'me':''}"><td class="num">${r.rank[i]}位</td><td>${esc(seatName(i))}${seatTag(i)?`<span class="tag">${seatTag(i)}</span>`:''}</td><td class="num">${vals[i]}</td><td class="num">${f(r.d[i])}</td><td class="num ${r.pts[i]?'pt':''}">+${r.pts[i]}</td></tr>`;
   const last = G.round+1>=ROUNDS, sb = subs();
-  app.innerHTML = `
+  app.innerHTML = `<div class="cols"><div class="col">
   ${topbar(`ROUND ${G.round+1} / ${ROUNDS}`)}
   <section class="win pop">
     <span class="cap">${rule.name}</span>
@@ -677,14 +710,15 @@ function renderResult(){
       <div><span class="k">最小・最大：</span>${st.min}, ${st.max}</div>
       <div class="hl">${rule.tf(st)}</div>
     </div>
-  </section>
-  <section class="win">
+  </section></div><div class="col"><section class="win grow">
     <span class="cap">RANKING ・ ${lim}位まで得点</span>
     <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>数</th><th>距離</th><th>得点</th></tr></thead>
     <tbody>${rowsHtml(order, cell, mi, 10, 5)}</tbody></table></div>
     ${sb.length?`<p class="note">時間内に出さなかった${sb.length}人の席はCPUが代役で出しました。</p>`:''}
   </section>
-  ${hostControls(last?'最終結果へ':'次のラウンドへ')}`;
+  ${hostControls(last?'最終結果へ':'次のラウンドへ')}
+  ${last?'':abortHtml()}</div></div>`;
+  bindAbort();
   const nb=document.getElementById('nextBtn'); if(nb) nb.onclick=()=>{ nb.disabled=true; nextRound(); };
 }
 function renderFinal(){
@@ -692,7 +726,7 @@ function renderFinal(){
   const order=tot.map((t,i)=>i).sort((a,b)=>tot[b]-tot[a] || a-b);
   const cell=i=>`<tr class="${i===mi?'me':''}"><td class="num">${rankOf(i)}位</td><td>${esc(seatName(i))}${i>=H()?`<span class="tag">${seatTag(i)}</span>`:''}</td><td class="num">${tot[i]}点</td></tr>`;
   const humans = seats().map((s,i)=>i).sort((a,b)=>tot[b]-tot[a] || a-b);
-  app.innerHTML = `
+  app.innerHTML = `<div class="cols"><div class="col">
   <header class="logo"><span class="sub">FINAL RESULT</span>
     <p class="big-title">${mi<0?'ゲーム終了':rankOf(mi)===1?'VICTORY':`${rankOf(mi)}位`}</p>
     <div class="rule"></div>
@@ -701,8 +735,7 @@ function renderFinal(){
     <span class="cap">STANDINGS ・ CPU込み</span>
     <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>合計</th></tr></thead>
     <tbody>${rowsHtml(order, cell, mi, 10, 3)}</tbody></table></div>
-  </section>
-  ${!solo && H()>1 ? `<section class="win">
+  </section></div><div class="col">${!solo && H()>1 ? `<section class="win grow">
     <span class="cap">PLAYERS ・ 人間だけ</span>
     <div class="tbl"><table><thead><tr><th>順位</th><th>プレイヤー</th><th>合計</th></tr></thead>
     <tbody>${humans.map(cell).join('')}</tbody></table></div>
@@ -710,7 +743,7 @@ function renderFinal(){
   ${isHost ? `<section class="win menu">
       <button class="cmd go" id="againBtn">${solo?'もう一度遊ぶ':'ロビーにもどる'}</button>
       <button class="cmd" id="homeBtn">タイトルへ</button></section>`
-    : `<section class="win menu"><p class="status" style="padding:4px 8px">ホストが次のゲームを準備するとロビーにもどります</p><button class="cmd" id="homeBtn">部屋を出る</button></section>`}`;
+    : `<section class="win menu"><p class="status" style="padding:4px 8px">ホストが次のゲームを準備するとロビーにもどります</p><button class="cmd" id="homeBtn">部屋を出る</button></section>`}</div></div>`;
   const ag=document.getElementById('againBtn');
   if(ag) ag.onclick = ()=>{ if(solo) startGame(); else backToLobby(); };
   document.getElementById('homeBtn').onclick = ()=>{ if(solo){ G=null; solo=false; isHost=false; screen='home'; render(); } else leaveRoom(); };
